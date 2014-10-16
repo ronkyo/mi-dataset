@@ -157,29 +157,40 @@ class Pco2aADclInstrumentDataParticle(DclInstrumentDataParticle):
     Class for generating the Pco2a_a_dcl instrument particles.
     """
 
+    # Dynamically set instrument_particle_map parameter when the
+    # mi/dataset/dataset_parser.py:Parser:_extract_sample() method is called.
+    particle_maps = {'A': INSTRUMENT_PARTICLE_AIR_MAP,
+                     'W': INSTRUMENT_PARTICLE_WATER_MAP}
+
     def __init__(self, raw_data, *args, **kwargs):
 
         super(Pco2aADclInstrumentDataParticle, self).__init__(
             raw_data,
-            {'A': INSTRUMENT_PARTICLE_AIR_MAP,
-             'W': INSTRUMENT_PARTICLE_WATER_MAP}[raw_data[SENSOR_GROUP_SAMPLE_TYPE]],
+            self.particle_maps[raw_data[SENSOR_GROUP_SAMPLE_TYPE]],
             *args, **kwargs)
 
     def data_particle_type(self):
         """
-        Return the data particle type (aka stream name)
+        Overridden method from DataParticle Class in mi/core/instrument/data_particle.py
+        Sets & return the data particle type (aka stream name)
         @raise: NotImplementedException if _data_particle_type is not set
         """
+
+        self._data_particle_type = self._data_particle_dict[self.raw_data[SENSOR_GROUP_SAMPLE_TYPE]]
+
         if self._data_particle_type is None:
             raise NotImplementedException("_data_particle_type not initialized")
 
-        return self._data_particle_type[self.raw_data[SENSOR_GROUP_SAMPLE_TYPE]]
+        return self._data_particle_type
 
 class Pco2aADclTelemeteredInstrumentDataParticle(Pco2aADclInstrumentDataParticle):
     """
     Class for generating Offset Data Particles from Telemetered air data.
     """
-    _data_particle_type = {
+
+    # Let the DataParticle base class _data_particle_type variable default to None.
+    # _data_particle_type will be dynamically set by the data_particle_type() accessor.
+    _data_particle_dict = {
         'A': DataParticleType.PCO2A_INSTRUMENT_AIR_PARTICLE,
         'W': DataParticleType.PCO2A_INSTRUMENT_WATER_PARTICLE}
 
@@ -188,7 +199,10 @@ class Pco2aADclRecoveredInstrumentDataParticle(Pco2aADclInstrumentDataParticle):
     """
     Class for generating Offset Data Particles from Recovered air data.
     """
-    _data_particle_type = {
+
+    # Let the DataParticle base class _data_particle_type variable default to None,
+    # _data_particle_type will be dynamically set by the data_particle_type() accessor.
+    _data_particle_dict = {
         'A': DataParticleType.PCO2A_INSTRUMENT_AIR_RECOVERED_PARTICLE,
         'W': DataParticleType.PCO2A_INSTRUMENT_WATER_RECOVERED_PARTICLE}
 
