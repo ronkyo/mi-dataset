@@ -23,7 +23,7 @@ from mi.core.instrument.chunker import StringChunker
 from mi.core.instrument.data_particle import DataParticle
 from mi.core.exceptions import UnexpectedDataException
 
-from mi.dataset.dataset_parser import BufferLoadingParser
+from mi.dataset.dataset_parser import BufferLoadingParser, DataSetDriverConfigKeys
 from mi.dataset.parser.common_regexes import END_OF_LINE_REGEX, SPACE_REGEX, \
     ANY_CHARS_REGEX, DATE_YYYY_MM_DD_REGEX, TIME_HR_MIN_SEC_MSEC_REGEX
 
@@ -115,8 +115,15 @@ class DclFileCommonParser(BufferLoadingParser):
 
         # Default the position within the file to the beginning.
         self.input_file = stream_handle
-        self.sensor_data_matcher = sensor_data_matcher
+
+        if sensor_data_matcher is not None:
+            self.sensor_data_matcher = sensor_data_matcher
         self.metadata_matcher = metadata_matcher
+
+        if DataSetDriverConfigKeys.PARTICLE_CLASSES_DICT in config:
+            self.particle_classes = config[DataSetDriverConfigKeys.PARTICLE_CLASSES_DICT].values()
+        else:
+            self.particle_classes = list(self._particle_class)
 
         # No fancy sieve function needed for this parser.
         # File is ASCII with records separated by newlines.
@@ -153,13 +160,20 @@ class DclFileCommonParser(BufferLoadingParser):
         timestamp, chunk, start, end = self._chunker.get_next_data_with_index(clean=True)
         self.handle_non_data(non_data, non_end, start)
 
-        while chunk is not None:
+        while chunk:
 
-            # If this is a valid sensor data record,
-            # use the extracted fields to generate a particle.
-            sensor_match = self.sensor_data_matcher.match(chunk)
+            for particle_class in self.particle_classes:
+                if particle_class.data_matcher is not None:
+                    self.sensor_data_matcher = particle_class.data_matcher
+
+                # If this is a valid sensor data record,
+                # use the extracted fields to generate a particle.
+                sensor_match = self.sensor_data_matcher.match(chunk)
+                if sensor_match is not None:
+                    break
+
             if sensor_match is not None:
-                particle = self._extract_sample(self._particle_class,
+                particle = self._extract_sample(particle_class,
                                                 None,
                                                 sensor_match.groups(),
                                                 None)
