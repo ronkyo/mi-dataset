@@ -9,10 +9,10 @@
 """
 
 from mi.dataset.driver.pco2a_a.dcl.pco2a_a_dcl_driver import process, \
-    RECOVERED_PARTICLE_CLASS
+    RECOVERED_PARTICLE_CLASSES
 
 
 def parse(basePythonCodePath, sourceFilePath, particleDataHdlrObj):
-    process(sourceFilePath, particleDataHdlrObj, RECOVERED_PARTICLE_CLASS)
+    process(sourceFilePath, particleDataHdlrObj, RECOVERED_PARTICLE_CLASSES)
 
     return particleDataHdlrObj

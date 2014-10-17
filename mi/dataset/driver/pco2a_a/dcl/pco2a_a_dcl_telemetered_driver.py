@@ -9,10 +9,10 @@
 """
 
 from mi.dataset.driver.pco2a_a.dcl.pco2a_a_dcl_driver import process, \
-    TELEMETERED_PARTICLE_CLASS
+    TELEMETERED_PARTICLE_CLASSES
 
 
 def parse(basePythonCodePath, sourceFilePath, particleDataHdlrObj):
-    process(sourceFilePath, particleDataHdlrObj, TELEMETERED_PARTICLE_CLASS)
+    process(sourceFilePath, particleDataHdlrObj, TELEMETERED_PARTICLE_CLASSES)
 
     return particleDataHdlrObj

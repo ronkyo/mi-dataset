@@ -197,6 +197,7 @@ class Pco2aDclAirInstrumentDataParticle(Pco2aDclInstrumentDataParticle):
     """
     Class for generating Offset Data Particles from Telemetered air data.
     """
+    _test_variable = None
     _data_particle_type = DataParticleType.PCO2A_INSTRUMENT_AIR_PARTICLE
 
 

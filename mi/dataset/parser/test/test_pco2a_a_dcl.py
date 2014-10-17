@@ -27,8 +27,9 @@ from mi.core.exceptions import UnexpectedDataException
 from mi.dataset.test.test_parser import ParserUnitTestCase
 from mi.dataset.dataset_parser import DataSetDriverConfigKeys
 
-from mi.dataset.driver.pco2a_a.dcl.pco2a_a_dcl_driver import Pco2aADclParser, \
-    MODULE_NAME, RECOVERED_PARTICLE_CLASS, TELEMETERED_PARTICLE_CLASS
+from mi.dataset.parser.pco2a_a_dcl import Pco2aADclParser
+from mi.dataset.driver.pco2a_a.dcl.pco2a_a_dcl_driver import \
+    MODULE_NAME, RECOVERED_PARTICLE_CLASSES, TELEMETERED_PARTICLE_CLASSES
 
 from mi.dataset.test.test_parser import BASE_RESOURCE_PATH
 RESOURCE_PATH = os.path.join(BASE_RESOURCE_PATH, 'pco2a_a', 'dcl', 'resource')
@@ -48,13 +49,14 @@ class Pco2aADclParserUnitTestCase(ParserUnitTestCase):
     pco2a_a_dcl Parser unit test suite
     """
 
-    def create_parser(self, particle_class, file_handle):
+    def create_parser(self, particle_classes, file_handle):
         """
         This function creates a Pco2aADcl parser.
         """
         parser = Pco2aADclParser(
             {DataSetDriverConfigKeys.PARTICLE_MODULE: MODULE_NAME,
-             DataSetDriverConfigKeys.PARTICLE_CLASS: particle_class},
+             DataSetDriverConfigKeys.PARTICLE_CLASS: None,
+            DataSetDriverConfigKeys.PARTICLE_CLASSES_DICT: particle_classes},
             file_handle,
             lambda state, ingested: None,
             self.publish_callback,
@@ -75,7 +77,7 @@ class Pco2aADclParserUnitTestCase(ParserUnitTestCase):
         """
         log.debug('===== START TEST verify record parser =====')
         in_file = self.open_file(FILE)
-        parser = self.create_parser(TELEMETERED_PARTICLE_CLASS, in_file)
+        parser = self.create_parser(TELEMETERED_PARTICLE_CLASSES, in_file)
 
         parser.get_records(RECORDS)
         self.assertListEqual(self.exception_callback_value, [])
@@ -95,7 +97,7 @@ class Pco2aADclParserUnitTestCase(ParserUnitTestCase):
         """
         log.debug('===== START TEST verify parser =====')
         in_file = self.open_file(FILE)
-        parser = self.create_parser(TELEMETERED_PARTICLE_CLASS, in_file)
+        parser = self.create_parser(TELEMETERED_PARTICLE_CLASSES, in_file)
 
         result = parser.get_records(RECORDS)
         self.assert_particles(result, YAML_FILE, RESOURCE_PATH)
@@ -112,7 +114,7 @@ class Pco2aADclParserUnitTestCase(ParserUnitTestCase):
         """
         log.debug('===== START TEST verify_parser RECOVERED =====')
         in_file = self.open_file(FILE)
-        parser = self.create_parser(RECOVERED_PARTICLE_CLASS, in_file)
+        parser = self.create_parser(RECOVERED_PARTICLE_CLASSES, in_file)
 
         parser.get_records(RECORDS)
 
@@ -132,7 +134,7 @@ class Pco2aADclParserUnitTestCase(ParserUnitTestCase):
         """
         log.debug('===== START TEST verify_parser RECOVERED =====')
         in_file = self.open_file(FILE)
-        parser = self.create_parser(RECOVERED_PARTICLE_CLASS, in_file)
+        parser = self.create_parser(RECOVERED_PARTICLE_CLASSES, in_file)
 
         result = parser.get_records(RECORDS)
         self.assert_particles(result, YAML_FILE_REC, RESOURCE_PATH)
@@ -190,7 +192,7 @@ class Pco2aADclParserUnitTestCase(ParserUnitTestCase):
 
         log.debug('===== START TEST failure verify_parser =====')
         in_file = self.open_file(FILE_FAILURE)
-        parser = self.create_parser(TELEMETERED_PARTICLE_CLASS, in_file)
+        parser = self.create_parser(TELEMETERED_PARTICLE_CLASSES, in_file)
 
         parser.get_records(RECORDS)
 
@@ -216,7 +218,7 @@ class Pco2aADclParserUnitTestCase(ParserUnitTestCase):
 
         log.debug('===== START TEST failure verify_parser RECOVERED =====')
         in_file = self.open_file(FILE_FAILURE)
-        parser = self.create_parser(RECOVERED_PARTICLE_CLASS, in_file)
+        parser = self.create_parser(RECOVERED_PARTICLE_CLASSES, in_file)
 
         parser.get_records(RECORDS)
 

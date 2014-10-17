@@ -40,15 +40,14 @@ from mi.dataset.parser.dcl_file_common import DclInstrumentDataParticle, \
     DclFileCommonParser, SENSOR_GROUP_TIMESTAMP, TIMESTAMP,\
     START_METADATA, END_METADATA, START_GROUP, END_GROUP
 
-from mi.core.exceptions import NotImplementedException
-
 from mi.dataset.parser.common_regexes import END_OF_LINE_REGEX, SPACE_REGEX, \
     FLOAT_REGEX, UNSIGNED_INT_REGEX, TIME_HR_MIN_SEC_REGEX, ANY_CHARS_REGEX
 
 # Basic patterns
 UINT = '('+UNSIGNED_INT_REGEX+')'   # unsigned integer as a group
 FLOAT = '('+FLOAT_REGEX+')'         # floating point as a captured group
-W_A_CHAR = r'([W|A])'
+W_CHAR = r'(W)'
+A_CHAR = r'(A)'
 COMMA = ','
 SHARP = '#'
 CHAR_M = ' *M'
@@ -84,9 +83,13 @@ SENSOR_DATA_PATTERN += FLOAT + COMMA        # raw signal cdom
 SENSOR_DATA_PATTERN += UINT + COMMA         # raw signal beta
 SENSOR_DATA_PATTERN += FLOAT + COMMA        # raw signal cdom
 SENSOR_DATA_PATTERN += FLOAT + COMMA        # raw signal cdom
-SENSOR_DATA_PATTERN += W_A_CHAR             # raw internal temperature
-SENSOR_DATA_PATTERN += END_OF_LINE_REGEX    # sensor data ends with CR-LF
-SENSOR_DATA_MATCHER = re.compile(SENSOR_DATA_PATTERN)
+
+SENSOR_DATA_PATTERN_AIR = SENSOR_DATA_PATTERN + A_CHAR + END_OF_LINE_REGEX
+SENSOR_DATA_MATCHER_AIR = re.compile(SENSOR_DATA_PATTERN_AIR)
+
+SENSOR_DATA_PATTERN_WATER = SENSOR_DATA_PATTERN + W_CHAR + END_OF_LINE_REGEX
+SENSOR_DATA_MATCHER_WATER = re.compile(SENSOR_DATA_PATTERN_WATER)
+
 
 # Manual test is below
 # >>me = re.match(r"((\d{4})/(\d{2})/(\d{2}) (\d{2}):(\d{2}):(\d{2})\.(\d{3})) #((\d{4}/\d{2}/\d{2})
@@ -152,67 +155,73 @@ class DataParticleType(BaseEnum):
     PCO2A_INSTRUMENT_WATER_RECOVERED_PARTICLE = 'pco2a_a_dcl_instrument_water_recovered'
 
 
-class Pco2aADclInstrumentDataParticle(DclInstrumentDataParticle):
+class Pco2aADclParticleClassKey(BaseEnum):
+    """
+    An enum for the keys application to the pco2a_a_dcl particle classes
+    """
+    AIR_PARTICLE_CLASS = 'air_particle_class'
+    WATER_PARTICLE_CLASS = 'water_particle_class'
+
+
+class Pco2aADclInstrumentDataParticleAir(DclInstrumentDataParticle):
     """
     Class for generating the Pco2a_a_dcl instrument particles.
     """
-
-    # Dynamically set instrument_particle_map parameter when the
-    # mi/dataset/dataset_parser.py:Parser:_extract_sample() method is called.
-    particle_maps = {'A': INSTRUMENT_PARTICLE_AIR_MAP,
-                     'W': INSTRUMENT_PARTICLE_WATER_MAP}
+    data_matcher = SENSOR_DATA_MATCHER_AIR
 
     def __init__(self, raw_data, *args, **kwargs):
 
-        super(Pco2aADclInstrumentDataParticle, self).__init__(
-            raw_data,
-            self.particle_maps[raw_data[SENSOR_GROUP_SAMPLE_TYPE]],
-            *args, **kwargs)
+        super(Pco2aADclInstrumentDataParticleAir, self).__init__(
+            raw_data, INSTRUMENT_PARTICLE_AIR_MAP, *args, **kwargs)
 
-    def data_particle_type(self):
-        """
-        Overridden method from DataParticle Class in mi/core/instrument/data_particle.py
-        Sets & return the data particle type (aka stream name)
-        @raise: NotImplementedException if _data_particle_type is not set
-        """
 
-        self._data_particle_type = self._data_particle_dict[self.raw_data[SENSOR_GROUP_SAMPLE_TYPE]]
+class Pco2aADclInstrumentDataParticleWater(DclInstrumentDataParticle):
+    """
+    Class for generating the Pco2a_a_dcl instrument particles.
+    """
+    data_matcher = SENSOR_DATA_MATCHER_WATER
 
-        if self._data_particle_type is None:
-            raise NotImplementedException("_data_particle_type not initialized")
+    def __init__(self, raw_data, *args, **kwargs):
 
-        return self._data_particle_type
+        super(Pco2aADclInstrumentDataParticleWater, self).__init__(
+            raw_data, INSTRUMENT_PARTICLE_WATER_MAP, *args, **kwargs)
 
-class Pco2aADclTelemeteredInstrumentDataParticle(Pco2aADclInstrumentDataParticle):
+
+class Pco2aADclTelemeteredInstrumentDataParticleAir(Pco2aADclInstrumentDataParticleAir):
     """
     Class for generating Offset Data Particles from Telemetered air data.
     """
-
-    # Let the DataParticle base class _data_particle_type variable default to None.
-    # _data_particle_type will be dynamically set by the data_particle_type() accessor.
-    _data_particle_dict = {
-        'A': DataParticleType.PCO2A_INSTRUMENT_AIR_PARTICLE,
-        'W': DataParticleType.PCO2A_INSTRUMENT_WATER_PARTICLE}
+    _data_particle_type = DataParticleType.PCO2A_INSTRUMENT_AIR_PARTICLE
 
 
-class Pco2aADclRecoveredInstrumentDataParticle(Pco2aADclInstrumentDataParticle):
+class Pco2aADclTelemeteredInstrumentDataParticleWater(Pco2aADclInstrumentDataParticleWater):
+    """
+    Class for generating Offset Data Particles from Telemetered water data.
+    """
+    _data_particle_type = DataParticleType.PCO2A_INSTRUMENT_WATER_PARTICLE
+
+
+class Pco2aADclRecoveredInstrumentDataParticleAir(Pco2aADclInstrumentDataParticleAir):
     """
     Class for generating Offset Data Particles from Recovered air data.
     """
+    _data_particle_type = DataParticleType.PCO2A_INSTRUMENT_AIR_RECOVERED_PARTICLE
 
-    # Let the DataParticle base class _data_particle_type variable default to None,
-    # _data_particle_type will be dynamically set by the data_particle_type() accessor.
-    _data_particle_dict = {
-        'A': DataParticleType.PCO2A_INSTRUMENT_AIR_RECOVERED_PARTICLE,
-        'W': DataParticleType.PCO2A_INSTRUMENT_WATER_RECOVERED_PARTICLE}
+
+class Pco2aADclRecoveredInstrumentDataParticleWater(Pco2aADclInstrumentDataParticleWater):
+    """
+    Class for generating Offset Data Particles from Recovered water data.
+    """
+    _data_particle_type = DataParticleType.PCO2A_INSTRUMENT_WATER_RECOVERED_PARTICLE
 
 
 class Pco2aADclParser(DclFileCommonParser):
     """
-    This is the entry point for the Metbk_a_dcl parser.
+    This is the entry point for the parser.
     """
+
     def __init__(self, *args, **kwargs):
 
-        super(Pco2aADclParser, self).__init__(SENSOR_DATA_MATCHER,
-                                             METADATA_MATCHER,
+        super(Pco2aADclParser, self).__init__(None,
+                                              METADATA_MATCHER,
                                              *args, **kwargs)
