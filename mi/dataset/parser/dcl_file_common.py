@@ -120,11 +120,6 @@ class DclFileCommonParser(BufferLoadingParser):
             self.sensor_data_matcher = sensor_data_matcher
         self.metadata_matcher = metadata_matcher
 
-        if DataSetDriverConfigKeys.PARTICLE_CLASSES_DICT in config:
-            self.particle_classes = config[DataSetDriverConfigKeys.PARTICLE_CLASSES_DICT].values()
-        else:
-            self.particle_classes = list(self._particle_class)
-
         # No fancy sieve function needed for this parser.
         # File is ASCII with records separated by newlines.
         super(DclFileCommonParser, self).__init__(
@@ -160,10 +155,16 @@ class DclFileCommonParser(BufferLoadingParser):
         timestamp, chunk, start, end = self._chunker.get_next_data_with_index(clean=True)
         self.handle_non_data(non_data, non_end, start)
 
+        # Accommodate for any parser not using the PARTICLE_CLASSES_DICT in config
+        if DataSetDriverConfigKeys.PARTICLE_CLASSES_DICT in self._config:
+            particle_classes = self._config[DataSetDriverConfigKeys.PARTICLE_CLASSES_DICT].values()
+        else:
+            particle_classes = (self._particle_class,)
+
         while chunk:
 
-            for particle_class in self.particle_classes:
-                if particle_class.data_matcher is not None:
+            for particle_class in particle_classes:
+                if hasattr(particle_class, "data_matcher"):
                     self.sensor_data_matcher = particle_class.data_matcher
 
                 # If this is a valid sensor data record,
