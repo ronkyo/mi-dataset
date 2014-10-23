@@ -123,9 +123,9 @@ class DclFileCommonParser(BufferLoadingParser):
             self.sensor_data_matcher = sensor_data_matcher
             self.particle_classes = None
         elif DataSetDriverConfigKeys.PARTICLE_CLASSES_DICT in config and \
-                not all(hasattr(particle_class, "data_matcher")
-                        for particle_class in config[DataSetDriverConfigKeys.PARTICLE_CLASSES_DICT].values()):
-            self.particle_classes = self._config[DataSetDriverConfigKeys.PARTICLE_CLASSES_DICT].values()
+                all(hasattr(particle_class, "data_matcher")
+                    for particle_class in config[DataSetDriverConfigKeys.PARTICLE_CLASSES_DICT].values()):
+            self.particle_classes = config[DataSetDriverConfigKeys.PARTICLE_CLASSES_DICT].values()
         else:
             raise InstrumentParameterException("data matcher required")
         self.metadata_matcher = metadata_matcher
