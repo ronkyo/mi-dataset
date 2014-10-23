@@ -21,7 +21,7 @@ from mi.core.log import get_logger
 log = get_logger()
 from mi.core.instrument.chunker import StringChunker
 from mi.core.instrument.data_particle import DataParticle
-from mi.core.exceptions import UnexpectedDataException
+from mi.core.exceptions import UnexpectedDataException, InstrumentParameterException
 
 from mi.dataset.dataset_parser import BufferLoadingParser, DataSetDriverConfigKeys
 from mi.dataset.parser.common_regexes import END_OF_LINE_REGEX, SPACE_REGEX, \
@@ -37,15 +37,15 @@ END_GROUP = ')'
 # Metadata fields:  [text] more text
 # Sensor data has space-delimited fields (date, time, integers)
 # All records end with newlines.
-TIME = r'(\d{2}):(\d{2}):(\d{2}\.\d{3})'  # Time: HH:MM:SS.mmm
+TIME = r'(\d{2}):(\d{2}):(\d{2}\.\d{3})'    # Time: HH:MM:SS.mmm
 TIMESTAMP = START_GROUP + DATE_YYYY_MM_DD_REGEX + SPACE_REGEX + \
             TIME_HR_MIN_SEC_MSEC_REGEX + END_GROUP
 START_METADATA = r'\['
 END_METADATA = r'\]'
 
 # All basic dcl records are ASCII characters separated by a newline.
-RECORD_PATTERN = ANY_CHARS_REGEX       # Any number of ASCII characters
-RECORD_PATTERN += END_OF_LINE_REGEX       # separated by a new line
+RECORD_PATTERN = ANY_CHARS_REGEX            # Any number of ASCII characters
+RECORD_PATTERN += END_OF_LINE_REGEX         # separated by a new line
 RECORD_MATCHER = re.compile(RECORD_PATTERN)
 
 SENSOR_GROUP_TIMESTAMP = 0
@@ -115,15 +115,20 @@ class DclFileCommonParser(BufferLoadingParser):
 
         # Default the position within the file to the beginning.
         self.input_file = stream_handle
+        record_matcher = kwargs.get('record_matcher', RECORD_MATCHER)
 
+        # Accommodate for any parser not using the PARTICLE_CLASSES_DICT in config
+        # Ensure a data matcher is passed as a parameter or defined in the particle class
         if sensor_data_matcher is not None:
             self.sensor_data_matcher = sensor_data_matcher
-        self.metadata_matcher = metadata_matcher
-
-        if DataSetDriverConfigKeys.PARTICLE_CLASSES_DICT in config:
+            self.particle_classes = None
+        elif DataSetDriverConfigKeys.PARTICLE_CLASSES_DICT in config and \
+                all(hasattr(particle_class, "data_matcher")
+                    for particle_class in config[DataSetDriverConfigKeys.PARTICLE_CLASSES_DICT].values()):
             self.particle_classes = config[DataSetDriverConfigKeys.PARTICLE_CLASSES_DICT].values()
         else:
-            self.particle_classes = list(self._particle_class)
+            raise InstrumentParameterException("data matcher required")
+        self.metadata_matcher = metadata_matcher
 
         # No fancy sieve function needed for this parser.
         # File is ASCII with records separated by newlines.
@@ -132,7 +137,7 @@ class DclFileCommonParser(BufferLoadingParser):
             stream_handle,
             None,
             partial(StringChunker.regex_sieve_function,
-                    regex_list=[RECORD_MATCHER]),
+                    regex_list=[record_matcher]),
             *args, **kwargs)
 
     def handle_non_data(self, non_data, non_end, start):
@@ -160,10 +165,14 @@ class DclFileCommonParser(BufferLoadingParser):
         timestamp, chunk, start, end = self._chunker.get_next_data_with_index(clean=True)
         self.handle_non_data(non_data, non_end, start)
 
+        # If not set from config & no InstrumentParameterException error from constructor
+        if self.particle_classes is None:
+            self.particle_classes = (self._particle_class,)
+
         while chunk:
 
             for particle_class in self.particle_classes:
-                if particle_class.data_matcher is not None:
+                if hasattr(particle_class, "data_matcher"):
                     self.sensor_data_matcher = particle_class.data_matcher
 
                 # If this is a valid sensor data record,
