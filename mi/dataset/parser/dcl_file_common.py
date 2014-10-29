@@ -138,7 +138,7 @@ class DclFileCommonParser(BufferLoadingParser):
             None,
             partial(StringChunker.regex_sieve_function,
                     regex_list=[record_matcher]),
-            *args, **kwargs)
+            *args)
 
     def handle_non_data(self, non_data, non_end, start):
         """
