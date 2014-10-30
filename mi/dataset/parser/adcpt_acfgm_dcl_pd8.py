@@ -33,11 +33,6 @@ from mi.dataset.parser.dcl_file_common import DclInstrumentDataParticle, \
 
 from mi.core.exceptions import UnexpectedDataException
 
-# Ron: This is from an older version, this moves to the driver
-MODULE_NAME = 'mi.dataset.parser.adcpt_acfgm_dcl_pd8'
-RECOVERED_PARTICLE_CLASS = 'AdcptPd8ARecoveredInstrumentDataParticle'
-TELEMETERED_PARTICLE_CLASS = 'AdcptPd8TelemeteredInstrumentDataParticle'
-
 from mi.dataset.parser.common_regexes import END_OF_LINE_REGEX, \
     FLOAT_REGEX, UNSIGNED_INT_REGEX, INT_REGEX, SPACE_REGEX, ANY_CHARS_REGEX, ASCII_HEX_CHAR_REGEX
 from mi.dataset.dataset_driver import DataSetDriver
@@ -370,17 +365,17 @@ class AdcpPd8Parser(DclFileCommonParser):
                         bit_string2 = self.sensor_temp_list[0][TEMP_HEX2]
 
                         for record in self.sensor_data_list:
-                            bin_lst.append(record[SENSOR_DATA_BIN])
-                            dir_lst.append(record[SENSOR_DATA_DIR])
-                            mag_lst.append(record[SENSOR_DATA_MAG])
-                            ew_lst.append(record[SENSOR_DATA_EW])
-                            ns_lst.append(record[SENSOR_DATA_NS])
-                            vert_lst.append(record[SENSOR_DATA_VERT])
-                            error_lst.append(record[SENSOR_DATA_ERR])
-                            echo1_lst.append(record[SENSOR_DATA_ECHO1])
-                            echo2_lst.append(record[SENSOR_DATA_ECHO2])
-                            echo3_lst.append(record[SENSOR_DATA_ECHO3])
-                            echo4_lst.append(record[SENSOR_DATA_ECHO4])
+                            bin_lst.append(int(record[SENSOR_DATA_BIN]))
+                            dir_lst.append(float(record[SENSOR_DATA_DIR]))
+                            mag_lst.append(float(record[SENSOR_DATA_MAG]))
+                            ew_lst.append(int(record[SENSOR_DATA_EW]))
+                            ns_lst.append(int(record[SENSOR_DATA_NS]))
+                            vert_lst.append(int(record[SENSOR_DATA_VERT]))
+                            error_lst.append(int(record[SENSOR_DATA_ERR]))
+                            echo1_lst.append(int(record[SENSOR_DATA_ECHO1]))
+                            echo2_lst.append(int(record[SENSOR_DATA_ECHO2]))
+                            echo3_lst.append(int(record[SENSOR_DATA_ECHO3]))
+                            echo4_lst.append(int(record[SENSOR_DATA_ECHO4]))
 
                         result = [
                             self.end_time_list[0][0],  # ('dcl_controller_timestamp', 0, str),

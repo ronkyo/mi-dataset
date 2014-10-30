@@ -20,7 +20,8 @@ from mi.core.exceptions import UnexpectedDataException
 
 from mi.dataset.test.test_parser import ParserUnitTestCase
 from mi.dataset.dataset_parser import DataSetDriverConfigKeys
-from mi.dataset.parser.adcpt_acfgm_dcl_pd8 import AdcpPd8Parser, \
+
+from mi.dataset.driver.adcpt_acfgm.dcl.pd8.adcpt_acfgm_dcl_pd8_driver_common import AdcpPd8Parser, \
     MODULE_NAME, RECOVERED_PARTICLE_CLASS, TELEMETERED_PARTICLE_CLASS
 
 from mi.dataset.test.test_parser import BASE_RESOURCE_PATH
