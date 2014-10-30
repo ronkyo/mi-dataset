@@ -6,7 +6,7 @@
 # Copyright 2014 Raytheon Co.
 ##
 
-__author__ = "Jeff Roy"
+__author__ = "Ronald Ronquillo"
 
 from mi.core.log import get_logger
 log = get_logger()

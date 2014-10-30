@@ -6,7 +6,7 @@
 # Copyright 2014 Raytheon Co.
 ##
 
-__author__ = "Jeff Roy"
+__author__ = "Ronald Ronquillo"
 
 import os
 
