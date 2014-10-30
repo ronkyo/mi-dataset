@@ -217,7 +217,7 @@ class BufferLoadingParser(Parser):
             num_to_fetch = len(self._record_buffer)
         else:
             num_to_fetch = num_records
-        log.trace("Yanking %s records of %s requested",
+        log.warn("Yanking %s records of %s requested",
                   num_to_fetch,
                   num_records)
 
@@ -228,7 +228,7 @@ class BufferLoadingParser(Parser):
             self._state = records_to_return[-1][1]  # state side of tuple of last entry
             # strip the state info off of them now that we have what we need
             for item in records_to_return:
-                log.debug("Record to return: %s", item)
+                log.debug("Record to return: %s", item[0].generate_dict())
                 return_list.append(item[0])
             self._publish_sample(return_list)
             log.trace("Sending parser state [%s] to driver", self._state)
