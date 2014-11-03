@@ -24,20 +24,18 @@ __author__ = 'Sung Ahn'
 __license__ = 'Apache 2.0'
 
 import re
+import numpy
 from mi.core.log import get_logger
 log = get_logger()
 from mi.core.common import BaseEnum
 
-from mi.dataset.parser.dcl_file_common import DclInstrumentDataParticle, \
-    DclFileCommonParser, TIMESTAMP, START_METADATA, END_METADATA, START_GROUP, END_GROUP
+from mi.dataset.parser.dcl_file_common import DclInstrumentDataParticle, DclFileCommonParser, \
+    TIMESTAMP, START_METADATA, END_METADATA, START_GROUP, END_GROUP, SENSOR_GROUP_TIMESTAMP
 
 from mi.core.exceptions import UnexpectedDataException
 
 from mi.dataset.parser.common_regexes import END_OF_LINE_REGEX, \
     FLOAT_REGEX, UNSIGNED_INT_REGEX, INT_REGEX, SPACE_REGEX, ANY_CHARS_REGEX, ASCII_HEX_CHAR_REGEX
-from mi.dataset.dataset_driver import DataSetDriver
-from mi.dataset.dataset_parser import DataSetDriverConfigKeys
-
 
 # Basic patterns
 UINT = '(' + UNSIGNED_INT_REGEX + ')'  # unsigned integer as a group
@@ -60,12 +58,6 @@ METADATA_PATTERN += END_METADATA  # followed by ']'
 METADATA_PATTERN += ANY_CHARS_REGEX  # followed by more text
 METADATA_PATTERN += END_OF_LINE_REGEX  # metadata record ends with LF
 METADATA_MATCHER = re.compile(METADATA_PATTERN)
-
-METADATA_PATTERN2 = TIMESTAMP + SPACE_REGEX  # dcl controller timestamp
-METADATA_PATTERN2 += START_METADATA  # Metadata record starts with '['
-METADATA_PATTERN2 += ANY_CHARS_REGEX  # followed by text
-METADATA_PATTERN2 += END_METADATA  # followed by ']'
-METADATA_PATTERN2 += ANY_CHARS_REGEX  # followed by more text
 
 # Line 2
 SENSOR_TIME_PATTERN = TIMESTAMP + MULTI_SPACE  # dcl controller timestamp
@@ -100,16 +92,16 @@ IGNORE_EMPTY_MATCHER = re.compile(IGNORE_EMPTY_PATTERN)
 
 # Sensor data record:
 SENSOR_DATA_PATTERN = TIMESTAMP + MULTI_SPACE  # dcl controller timestamp
-SENSOR_DATA_PATTERN += UINT + MULTI_SPACE  # bin
+SENSOR_DATA_PATTERN += UINT + MULTI_SPACE   # bin
 SENSOR_DATA_PATTERN += FLOAT + MULTI_SPACE  # Dir
 SENSOR_DATA_PATTERN += FLOAT + MULTI_SPACE  # Mag
-SENSOR_DATA_PATTERN += SINT + MULTI_SPACE  # E/W
-SENSOR_DATA_PATTERN += SINT + MULTI_SPACE  # N/S
-SENSOR_DATA_PATTERN += SINT + MULTI_SPACE  # Vert
-SENSOR_DATA_PATTERN += SINT + MULTI_SPACE  # Err
-SENSOR_DATA_PATTERN += UINT + MULTI_SPACE  # Echo1
-SENSOR_DATA_PATTERN += UINT + MULTI_SPACE  # Echo2
-SENSOR_DATA_PATTERN += UINT + MULTI_SPACE  # Echo3
+SENSOR_DATA_PATTERN += SINT + MULTI_SPACE   # E/W
+SENSOR_DATA_PATTERN += SINT + MULTI_SPACE   # N/S
+SENSOR_DATA_PATTERN += SINT + MULTI_SPACE   # Vert
+SENSOR_DATA_PATTERN += SINT + MULTI_SPACE   # Err
+SENSOR_DATA_PATTERN += UINT + MULTI_SPACE   # Echo1
+SENSOR_DATA_PATTERN += UINT + MULTI_SPACE   # Echo2
+SENSOR_DATA_PATTERN += UINT + MULTI_SPACE   # Echo3
 SENSOR_DATA_PATTERN += UINT  # Echo4
 SENSOR_DATA_PATTERN += END_OF_LINE_REGEX  # sensor data ends with CR-LF
 SENSOR_DATA_MATCHER = re.compile(SENSOR_DATA_PATTERN)
@@ -125,8 +117,18 @@ PACKET_PATTERN += IGNORE_EMPTY_PATTERN
 PACKET_PATTERN += METADATA_PATTERN
 PACKET_MATCHER = re.compile(PACKET_PATTERN, re.DOTALL)
 
-MATCHER_LIST = [SENSOR_DATA_MATCHER, SENSOR_TEMP_MATCHER, SENSOR_HEAD_MATCHER, SENSOR_TIME_MATCHER,
-                IGNORE_HEAD_MATCHER, IGNORE_EMPTY_MATCHER]
+MATCHER_LIST = [SENSOR_TIME_MATCHER, SENSOR_HEAD_MATCHER, SENSOR_TEMP_MATCHER, IGNORE_HEAD_MATCHER,
+                SENSOR_DATA_MATCHER, IGNORE_EMPTY_MATCHER]
+
+MATCHER_MAP = [
+    #
+    (SENSOR_TIME_MATCHER,   1,      0),
+    (SENSOR_HEAD_MATCHER,   2,      0),
+    (SENSOR_TEMP_MATCHER,   3,      0),
+    (IGNORE_HEAD_MATCHER,   4,      0),
+    (SENSOR_DATA_MATCHER,   4,      5),
+    (IGNORE_EMPTY_MATCHER,  0,      0)
+]
 
 SENSOR_DATA_BIN = 8
 SENSOR_DATA_DIR = 9
@@ -157,42 +159,32 @@ TEMP_HEX2 = 11
 PD8_DATA_MAP = [
     ('dcl_controller_timestamp', 0, str),
     ('dcl_controller_starting_timestamp', 8, str),
-    ('num_cells', 9, int),
-    ('ensemble_number', 10, int),
-    ('instrument_timestamp', 11, str),
-    ('bit_result_demod_1', 12, int),
-    ('bit_result_demod_0', 13, int),
-    ('bit_result_timing', 14, int),
-    ('speed_of_sound', 15, int),
-    ('heading', 16, float),
-    ('pitch', 17, float),
-    ('roll', 18, float),
-    ('temperature', 19, float),
-    ('water_direction', 20, list),
-    ('water_velocity', 21, list),
-    ('water_velocity_east', 22, list),
-    ('water_velocity_north', 23, list),
-    ('water_velocity_up', 24, list),
-    ('error_velocity', 25, list),
-    ('echo_intensity_beam1', 26, list),
-    ('echo_intensity_beam2', 27, list),
-    ('echo_intensity_beam3', 28, list),
-    ('echo_intensity_beam4', 29, list)
-]
+    ('ensemble_number', 9, int),
+    ('instrument_timestamp', 10, str),
 
-# Ron: This is from an older version, this moves to the driver
-def process(source_file_path, particle_data_hdlr_obj, particle_class):
-    with open(source_file_path, "r") as stream_handle:
-        parser = AdcpPd8Parser(
-            {DataSetDriverConfigKeys.PARTICLE_MODULE: MODULE_NAME,
-             DataSetDriverConfigKeys.PARTICLE_CLASS: particle_class},
-            stream_handle,
-            lambda state, ingested: None,
-            lambda data: log.trace("Found data: %s", data),
-            lambda ex: particle_data_hdlr_obj.setParticleDataCaptureFailure()
-        )
-        driver = DataSetDriver(parser, particle_data_hdlr_obj)
-        driver.processFileStream()
+    ('heading', 11, float),
+    ('pitch', 12, float),
+    ('roll', 13, float),
+
+    ('temperature', 14, float),
+    ('speed_of_sound', 15, int),
+
+    ('bit_result_demod_1', 16, int),
+    ('bit_result_demod_0', 17, int),
+    ('bit_result_timing', 18, int),
+
+    ('num_cells', 19, int),
+    ('water_direction', 20, lambda x: [float(y) for y in x]),
+    ('water_velocity', 21, lambda x: [float(y) for y in x]),
+    ('water_velocity_east', 22, lambda x: [int(y) for y in x]),
+    ('water_velocity_north', 23, lambda x: [int(y) for y in x]),
+    ('water_velocity_up', 24, lambda x: [int(y) for y in x]),
+    ('error_velocity', 25, lambda x: [int(y) for y in x]),
+    ('echo_intensity_beam2', 27, lambda x: [int(y) for y in x]),
+    ('echo_intensity_beam1', 26, lambda x: [int(y) for y in x]),
+    ('echo_intensity_beam3', 28, lambda x: [int(y) for y in x]),
+    ('echo_intensity_beam4', 29, lambda x: [int(y) for y in x])
+]
 
 
 class DataParticleType(BaseEnum):
@@ -230,16 +222,16 @@ class AdcpPd8Parser(DclFileCommonParser):
     """
 
     sensor_data_list = []
-    sensor_temp_list = []
-    sensor_head_list = []
-    sensor_time_list = []
-    end_time_list = []
+    # sensor_temp_list = []
+    # sensor_head_list = []
+    # sensor_time_list = []
+    # end_time_list = []
+    farsed_data = []
 
     def __init__(self, *args, **kwargs):
 
         super(AdcpPd8Parser, self).__init__(SENSOR_DATA_MATCHER,
                                             METADATA_MATCHER,
-                                            # record_matcher=PACKET_MATCHER,
                                             *args, **kwargs)
 
     def check_bit(self, hex_value, index):
@@ -289,6 +281,13 @@ class AdcpPd8Parser(DclFileCommonParser):
             result = self.parse_chunks()
             self._record_buffer.extend(result)
 
+    def read_chunk(self):
+        nd_timestamp, non_data, non_start, non_end = self._chunker.get_next_non_data_with_index(clean=False)
+        timestamp, chunk, start, end = self._chunker.get_next_data_with_index(clean=True)
+        self.handle_non_data(non_data, non_end, start)
+
+        return chunk
+
     # Overwrite the one in dcl_file_common
     def parse_chunks(self):
         """
@@ -298,23 +297,37 @@ class AdcpPd8Parser(DclFileCommonParser):
         @retval a list of tuples with sample particles encountered in this
             parsing, plus the state.
         """
-        result = []
+        parsed_data = []
         result_particles = []
-        nd_timestamp, non_data, non_start, non_end = self._chunker.get_next_non_data_with_index(clean=False)
-        timestamp, chunk, start, end = self._chunker.get_next_data_with_index(clean=True)
 
-        self.handle_non_data(non_data, non_end, start)
 
-        # log.warn("CHUNK: %s, %s, %s", chunk, start, end)
+        index = 0
+        MATCHER = 0
+        NEXT = 1
+        OTHER = 2
 
+        chunk = self.read_chunk()
         while chunk:
+        # loop is here
+            # try matching a dcl log
 
-            # Read line by line
-            # lines = chunk.splitlines(1)
-            # for line in lines:
+            # else match using list
+            # line_match = MATCHER_LIST[index].match(chunk)
+            # if line_match is not None:
+            #     # Move to the next matcher
+            #     index = (index + 1) % len(MATCHER_LIST)
+            #
+            #     # Get the relevant data
+            #     pass
 
-                # log.warn("LINE: %s", line)
-            # log.warn("PARSE CHUNK: %s", chunk)
+            # line_match = MATCHER_MAP[index][MATCHER].match(chunk)
+            # if line_match is not None:
+            #     # Move to the next matcher
+            #     index = MATCHER_MAP[index][NEXT].match(chunk)
+            #
+            #     # Get the relevant data
+            # else:
+            #     index = MATCHER_MAP[index][OTHER].match(chunk)
 
             for matcher in MATCHER_LIST:
                 line_match = matcher.match(chunk)
@@ -323,108 +336,50 @@ class AdcpPd8Parser(DclFileCommonParser):
                     break
 
             if line_match is not None:
-                if matcher is SENSOR_DATA_MATCHER:                  # Multi line
-                    self.sensor_data_list.append(line_match.groups())
-                elif matcher is SENSOR_TEMP_MATCHER:                # Line 3
-                    self.sensor_temp_list.append(line_match.groups())
+
+                if matcher is SENSOR_TIME_MATCHER:                  # Line 1
+                    self.farsed_data.append(line_match.groups()[SENSOR_GROUP_TIMESTAMP])
+                    self.farsed_data.append(line_match.groups()[SENSOR_TIME_ENSEMBLE])
+                    self.farsed_data.append(line_match.groups()[SENSOR_TIME_SENSOR_DATE_TIME])
+
                 elif matcher is SENSOR_HEAD_MATCHER:                # Line 2
-                    self.sensor_head_list.append(line_match.groups())
-                elif matcher is SENSOR_TIME_MATCHER:                # Line 1
-                    self.sensor_time_list.append(line_match.groups())
+                    self.farsed_data.append(line_match.groups()[HEAD_HEADING])
+                    self.farsed_data.append(line_match.groups()[HEAD_PITCH])
+                    self.farsed_data.append(line_match.groups()[HEAD_ROLL])
+
+                elif matcher is SENSOR_TEMP_MATCHER:                # Line 3
+                    self.farsed_data.append(line_match.groups()[TEMP_TEMP])
+                    self.farsed_data.append(line_match.groups()[TEMP_SOS])
+                    self.farsed_data.append(self.check_bit(line_match.groups()[TEMP_HEX1], 3))
+                    self.farsed_data.append(self.check_bit(line_match.groups()[TEMP_HEX2], 0))
+                    self.farsed_data.append(self.check_bit(line_match.groups()[TEMP_HEX2], 2))
+
+                elif matcher is SENSOR_DATA_MATCHER:                # Multi line
+                    self.sensor_data_list.append(line_match.groups()[SENSOR_DATA_BIN:])
+
                 elif matcher is IGNORE_EMPTY_MATCHER:               # Last Line
-                    self.end_time_list.append(line_match.groups())
+                    final_data = []
+                    final_data.extend(line_match.groups())
 
-                    bin_lst = []
-                    dir_lst = []
-                    mag_lst = []
-                    ew_lst = []
-                    ns_lst = []
-                    vert_lst = []
-                    error_lst = []
-                    echo1_lst = []
-                    echo2_lst = []
-                    echo3_lst = []
-                    echo4_lst = []
-                    sensor_head_len = len(self.sensor_head_list)
-                    sensor_temp_len = len(self.sensor_temp_list)
-                    sensor_time_len = len(self.sensor_time_list)
-                    sensor_data_list_len = len(self.sensor_data_list)
-                    end_time_list_len = len(self.end_time_list)
+                    self.farsed_data.append(self.sensor_data_list[-1][0])
+                    tran_array = numpy.array(self.sensor_data_list)
+                    self.farsed_data.extend(tran_array.transpose().tolist()[1:])
 
-                    # There should be only one instance of the following record
-                    if sensor_head_len != 1 or sensor_temp_len != 1 or sensor_time_len != 1 or \
-                       end_time_list_len != 1 or sensor_data_list_len > 0 and \
-                       sensor_data_list_len != int(self.sensor_data_list[-1][SENSOR_DATA_BIN]):
-                        error_message = 'Unknown data found in chunk [ERROR] %s %s %s %s %s %s' % \
-                                        (chunk, sensor_head_len, sensor_temp_len, sensor_time_len, end_time_list_len, sensor_data_list_len)
-                        log.warn(error_message)
-                        self._exception_callback(UnexpectedDataException(error_message))
+                    final_data.extend(self.farsed_data)
 
-                    else:
-                        bit_string1 = self.sensor_temp_list[0][TEMP_HEX1]
-                        bit_string2 = self.sensor_temp_list[0][TEMP_HEX2]
+                    log.warn("TEST PRINT: %s", final_data)
 
-                        for record in self.sensor_data_list:
-                            bin_lst.append(int(record[SENSOR_DATA_BIN]))
-                            dir_lst.append(float(record[SENSOR_DATA_DIR]))
-                            mag_lst.append(float(record[SENSOR_DATA_MAG]))
-                            ew_lst.append(int(record[SENSOR_DATA_EW]))
-                            ns_lst.append(int(record[SENSOR_DATA_NS]))
-                            vert_lst.append(int(record[SENSOR_DATA_VERT]))
-                            error_lst.append(int(record[SENSOR_DATA_ERR]))
-                            echo1_lst.append(int(record[SENSOR_DATA_ECHO1]))
-                            echo2_lst.append(int(record[SENSOR_DATA_ECHO2]))
-                            echo3_lst.append(int(record[SENSOR_DATA_ECHO3]))
-                            echo4_lst.append(int(record[SENSOR_DATA_ECHO4]))
+                    if final_data is not None:  # is this possible?
+                        particle = self._extract_sample(self._particle_class,
+                                                        None,
+                                                        final_data,
+                                                        None)
+                        if particle is not None:
+                            # log.warn("PARTICLE: %s", particle.generate_dict())
+                            result_particles.append((particle, None))
 
-                        result = [
-                            self.end_time_list[0][0],  # ('dcl_controller_timestamp', 0, str),
-                            self.end_time_list[0][1],  # ('dcl_controller_timestamp', 0, str),
-                            self.end_time_list[0][2],  # ('dcl_controller_timestamp', 0, str),
-                            self.end_time_list[0][3],  # ('dcl_controller_timestamp', 0, str),
-                            self.end_time_list[0][4],  # ('dcl_controller_timestamp', 0, str),
-                            self.end_time_list[0][5],  # ('dcl_controller_timestamp', 0, str),
-                            self.end_time_list[0][6],  # ('dcl_controller_timestamp', 0, str),
-                            self.end_time_list[0][7],  # ('dcl_controller_timestamp', 0, str),
-                            self.sensor_time_list[0][0],  # ('dcl_controller_starting_timestamp', 1, str),
-                            bin_lst[len(bin_lst) - 1],  # ('num_cells', 2, int),
-                            self.sensor_time_list[0][SENSOR_TIME_ENSEMBLE],  # ('ensemble_number', 3, int),
-                            self.sensor_time_list[0][SENSOR_TIME_SENSOR_DATE_TIME],  # ('instrument_timestamp', 4, str),
-
-                            self.check_bit(bit_string1, 3),  # ('bit_result_demod_1', 5, int),
-                            self.check_bit(bit_string2, 0),  # ('bit_result_demod_0', 6, int),
-                            self.check_bit(bit_string2, 2),  # ('bit_result_timing', 7, int),
-                            self.sensor_temp_list[0][TEMP_SOS],  # ('speed_of_sound', 8, int),
-                            self.sensor_head_list[0][HEAD_HEADING],  # ('heading', 9, float),
-                            self.sensor_head_list[0][HEAD_PITCH],  # ('pitch', 10, float),
-                            self.sensor_head_list[0][HEAD_ROLL],  # ('roll', 11, float),
-                            self.sensor_temp_list[0][TEMP_TEMP],  # ('temperature', 12, float),
-                            dir_lst,  # ('water_direction', 13, list),
-                            mag_lst,  # ('water_velocity', 14, list),
-                            ew_lst,  # ('water_velocity_east', 15, list),
-                            ns_lst,  # ('water_velocity_north', 16, list),
-                            vert_lst,  # ('water_velocity_up', 17, list),
-                            error_lst,  # ('error_velocity', 18, list),
-                            echo1_lst,  # ('echo_intensity_beam1', 19, list),
-                            echo2_lst,  # ('echo_intensity_beam2', 20, list),
-                            echo3_lst,  # ('echo_intensity_beam3', 21, list),
-                            echo4_lst  # ('echo_intensity_beam4', 22, list)
-                        ]
-
-                        if result is not None:  # is this possible?
-                            particle = self._extract_sample(self._particle_class,
-                                                            None,
-                                                            result,
-                                                            None)
-                            if particle is not None:
-                                log.warn("PARTICLE: %s", particle.generate_dict())
-                                result_particles.append((particle, None))
-
+                    del self.farsed_data[:]
                     del self.sensor_data_list[:]
-                    del self.sensor_temp_list[:]
-                    del self.sensor_head_list[:]
-                    del self.sensor_time_list[:]
-                    del self.end_time_list[:]
 
                 else:
                     pass  # ignore
@@ -439,8 +394,6 @@ class AdcpPd8Parser(DclFileCommonParser):
                     log.warn(error_message)
                     self._exception_callback(UnexpectedDataException(error_message))
 
-            nd_timestamp, non_data, non_start, non_end = self._chunker.get_next_non_data_with_index(clean=False)
-            timestamp, chunk, start, end = self._chunker.get_next_data_with_index(clean=True)
-            self.handle_non_data(non_data, non_end, start)
+            chunk = self.read_chunk()
 
         return result_particles
