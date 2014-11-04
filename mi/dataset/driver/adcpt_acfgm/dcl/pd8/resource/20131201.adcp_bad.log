@@ -1,84 +1,44 @@
-# DCL Log missing opening square bracket
 2013/12/01 00:00:23.284 adcp:DLOGP1]:Instrument Started [Power On]
-# Timestamp has a float
 2013/12/01.1 00:04:20.700 2013/12/01 00:00:29.99 00001
-# Heading is not a float
 2013/12/01 00:04:20.742 Hdg: 348 Pitch: 0.0 Roll: -1.1
-# Temp is not a float
 2013/12/01 00:04:20.766 Temp: 138 SoS: 1505 BIT: 00
-# Header typo
 2013/12/01 00:04:20.887 Bim    Dir    Mag     E/W     N/S    Vert     Err   Echo1  Echo2  Echo3  Echo4
-# Timestamp has non digit
 2013/12/01A 00:04:20.932   1    8.5  134.5      20     133       3      -2    162    166    163    164
-# Timestamp missing milliseconds
 2013/12/01 00:04:21.01   2    4.5  127.4      10     127      -8       5    171    170    171    169
-# Bin missing
 2013/12/01 00:04:21.099      13.1  144.8      33     141       5     -12    172    168    171    166
-# Dir missing
 2013/12/01 00:04:21.182   4    138.6     -13     138      16      19    174    173    174    169
-# Mag missing
 2013/12/01 00:04:21.257   5    8.5        29     193       0     -17    187    181    180    177
-# E/W missing
 2013/12/01 00:04:21.340   6    0.7  243.0            243       2       8    192    189    188    186
-# N/S missing
 2013/12/01 00:04:21.424   7  351.0  254.2     -40           18       8    198    196    196    194
-# Vert missing
 2013/12/01 00:04:21.507   8  346.1  249.3     -60     242            -5    200    200    200    198
-# Err missing
 2013/12/01 00:04:21.590   9  351.3  297.4     -45     294       8         197    201    197    198
-# Echo1 missing
 2013/12/01 00:04:21.674  10  341.5  301.7     -96     286       8       2        199    195    195
-# Echo2 missing
 2013/12/01 00:04:21.757  11  346.5  315.8     -74     307       4     -13    194        193    194
-# Echo3 missing
 2013/12/01 00:04:21.840  12  351.9  303.1     -43     300       9       4    192    196        193
-# Echo4 missing
 2013/12/01 00:04:21.915  13  339.5  288.3    -101     270      10     -34    191    194    190
-# Dir is not a float
 2013/12/01 00:04:21.999  14  3378  301.4    -114     279       3      48    191    194    190    191
-# Dir has a non digit
 2013/12/01 00:04:22.092  15  337.A2  339.7    -132     313       2      45    189    192    188    189
-# Mag is not a float
 2013/12/01 00:04:22.166  16  342.3  3181     -97     303       9     -14    188    191    188    188
-# Mag has a non digit
 2013/12/01 00:04:22.249  17  341.8  319.A1    -100     303       1     -18    188    190    187    187
-# E/W is a float
 2013/12/01 00:04:22.332  18  336.9  307.8    -121.1     283       3     -15    188    190    187    186
-# E/W has a non digit
 2013/12/01 00:04:22.415  19  336.8  255.8    -$101     235       9      19    186    188    185    186
-# N/S is a float
 2013/12/01 00:04:22.499  20  341.4  297.6     -95     282.7      -1      -8    185    187    185    185
-# N/S is a non digit
 2013/12/01 00:04:22.574  21  340.3  296.4    -100     279R       7     -34    186    188    186    186
-# Vert is a float
 2013/12/01 00:04:22.657  22  337.2  187.8     -73     173      -5.5     -31    183    187    183    185
-# Vert is a non digit
 2013/12/01 00:04:22.741  23  319.4  112.0     -73      85       3E     -44    181    184    180    181
-# Err is a float
 2013/12/01 00:04:22.824  24  328.5  118.5     -62     101      -4      -2.2    179    182    177    179
-# Err has a non digit
 2013/12/01 00:04:22.907  25  302.1   84.9     -72      45      -4     -31I    176    179    176    177
-# Echo1 is a float
 2013/12/01 00:04:22.990  26  265.4  114.4    -114      -9       2     -30    175.5    178    175    175
-# Echo1 has a non digit
 2013/12/01 00:04:23.074  27  258.1  126.7    -124     -26       7     -28    17L6    178    175    176
-# Echo2 is a float
 2013/12/01 00:04:23.157  28  248.6  107.3    -100     -39      10      24    174    17.7    174    175
-# Echo2 has a non digit
 2013/12/01 00:04:23.232  29  221.7  100.6     -67     -75       6      28    173    1I76    172    174
-# Echo3 is negative
 2013/12/01 00:04:23.315  30  201.6  151.7     -56    -141       6      21    169    172    -167    172
-# Timestamp missing secconds
 2013/12/01 00:04:.320
-# DCL Logging missing closing square bracket
 2013/12/01 00:06:06.488 [adcp:DLOGP1]:Instrument Stopped [Power Off
 2013/12/01 00:06:17.757 [adcp:DLOGP1]:
 2013/12/01 01:00:20.797 [adcp:DLOGP1]:Instrument Started [Power On]
-# Ensemble number is a float
 2013/12/01 01:04:18.213 2013/12/01 01:00:27.53 0000.1
-# Pitch is not a float
 2013/12/01 01:04:18.246 Hdg: 34.7 Pitch: 0 Roll: -1.1
-# Speed of sound is a float
 2013/12/01 01:04:18.279 Temp: 13.8 SoS: 150.5 BIT: 00
 2013/12/01 01:04:18.363 Bin    Dir    Mag     E/W     N/S    Vert     Err   Echo1  Echo2  Echo3  Echo4
 2013/12/01 01:04:18.446   1   14.6   47.5      12      46      -3       5    162    168    164    168
@@ -117,7 +77,6 @@
 2013/12/01 01:57:34.692 [adcp:DLOGP1]:Idle state, without initialize
 2013/12/01 02:00:22.298 [adcp:DLOGP1]:Instrument Started [Power On]
 2013/12/01 02:04:19.716 2013/12/01 02:00:29.07 00001
-# Roll is not a float
 2013/12/01 02:04:19.749 Hdg: 34.8 Pitch: 0.0 Roll: -11
 2013/12/01 02:04:19.783 Temp: 13.8 SoS: 1505 BIT: 00
 2013/12/01 02:04:19.866 Bin    Dir    Mag     E/W     N/S    Vert     Err   Echo1  Echo2  Echo3  Echo4
@@ -157,7 +116,6 @@
 2013/12/01 02:57:31.461 [adcp:DLOGP1]:Idle state, without initialize
 2013/12/01 03:00:21.551 [adcp:DLOGP1]:Instrument Started [Power On]
 2013/12/01 03:04:18.952 2013/12/01 03:00:28.31 00001
-# Heading has a non digit
 2013/12/01 03:04:18.986 Hdg: 34.A7 Pitch: 0.0 Roll: -1.1
 2013/12/01 03:04:19.019 Temp: 13.8 SoS: 1505 BIT: 00
 2013/12/01 03:04:19.102 Bin    Dir    Mag     E/W     N/S    Vert     Err   Echo1  Echo2  Echo3  Echo4
@@ -197,7 +155,6 @@
 2013/12/01 03:57:32.955 [adcp:DLOGP1]:Idle state, without initialize
 2013/12/01 04:00:21.346 [adcp:DLOGP1]:Instrument Started [Power On]
 2013/12/01 04:04:18.737 2013/12/01 04:00:28.10 00001
-# Pitch has a non digit
 2013/12/01 04:04:18.776 Hdg: 34.9 Pitch: 0.A0 Roll: -1.1
 2013/12/01 04:04:18.806 Temp: 13.8 SoS: 1505 BIT: 00
 2013/12/01 04:04:18.886 Bin    Dir    Mag     E/W     N/S    Vert     Err   Echo1  Echo2  Echo3  Echo4
@@ -236,7 +193,6 @@
 2013/12/01 04:57:31.142 [adcp:DLOGP1]:Idle state, without initialize
 2013/12/01 05:00:20.233 [adcp:DLOGP1]:Instrument Started [Power On]
 2013/12/01 05:04:17.598 2013/12/01 05:00:26.97 00001
-# Roll has a non digit
 2013/12/01 05:04:17.631 Hdg: 34.7 Pitch: 0.0 Roll: -1.1A
 2013/12/01 05:04:17.665 Temp: 13.8 SoS: 1505 BIT: 00
 2013/12/01 05:04:17.748 Bin    Dir    Mag     E/W     N/S    Vert     Err   Echo1  Echo2  Echo3  Echo4
