@@ -138,7 +138,7 @@ class DclFileCommonParser(BufferLoadingParser):
             None,
             partial(StringChunker.regex_sieve_function,
                     regex_list=[record_matcher]),
-            *args)
+            *args, **kwargs)
 
     def handle_non_data(self, non_data, non_end, start):
         """
@@ -205,3 +205,89 @@ class DclFileCommonParser(BufferLoadingParser):
             self.handle_non_data(non_data, non_end, start)
 
         return result_particles
+
+
+# class DCLParser(SimpleParser):
+#     def __init__(self,
+#                  sensor_data_matcher,
+#                  metadata_matcher,
+#                  config,
+#                  stream_handle,
+#                  *args, **kwargs
+#                  ):
+#
+#          # Accommodate for any parser not using the PARTICLE_CLASSES_DICT in config
+#         # Ensure a data matcher is passed as a parameter or defined in the particle class
+#         if sensor_data_matcher is not None:
+#             self.sensor_data_matcher = sensor_data_matcher
+#             self.particle_classes = None    # will be set from self._particle_class once instantiated
+#         elif DataSetDriverConfigKeys.PARTICLE_CLASSES_DICT in config and \
+#                 all(hasattr(particle_class, "data_matcher")
+#                     for particle_class in config[DataSetDriverConfigKeys.PARTICLE_CLASSES_DICT].values()):
+#             self.particle_classes = config[DataSetDriverConfigKeys.PARTICLE_CLASSES_DICT].values()
+#         else:
+#             raise InstrumentParameterException("data matcher required")
+#         self.metadata_matcher = metadata_matcher
+#
+#         # no sieve function since we are not using the chunker here
+#         super(DCLParser, self).__init__(config,
+#                                         stream_handle,
+#                                         *args, **kwargs)
+#
+#         # self._particle_class = eval(config[DataSetDriverConfigKeys.PARTICLE_CLASS])
+#
+#     def parse_file(self):
+#
+#         result_particles = []
+#
+#         # read the first line in the file
+#         line = self._stream_handle.readline()
+#
+#         # If not set from config & no InstrumentParameterException error from constructor
+#         if self.particle_classes is None:
+#             self.particle_classes = (self._particle_class,)
+#
+#         while line:
+#
+#             for particle_class in self.particle_classes:
+#                 if hasattr(particle_class, "data_matcher"):
+#                     self.sensor_data_matcher = particle_class.data_matcher
+#
+#                 # If this is a valid sensor data record,
+#                 # use the extracted fields to generate a particle.
+#                 sensor_match = self.sensor_data_matcher.match(line)
+#                 if sensor_match is not None:
+#                     break
+#
+#             if sensor_match is not None:
+#                 particle = self._extract_sample(particle_class,
+#                                                 None,
+#                                                 sensor_match.groups(),
+#                                                 None)
+#                 if particle is not None:
+#                     result_particles.append((particle, None))
+#
+#             # It's not a sensor data record, see if it's a metadata record.
+#             else:
+#
+#                 # If it's a valid metadata record, ignore it.
+#                 # Otherwise generate warning for unknown data.
+#                 meta_match = self.metadata_matcher.match(line)
+#                 if meta_match is None:
+#                     error_message = 'Unknown data found in line %s' % line
+#                     log.warn(error_message)
+#                     self._exception_callback(UnexpectedDataException(error_message))
+#
+#             # read the next line in the file
+#             line = self._stream_handle.readline()
+#
+#         return result_particles
+#
+#     def extract_particle(self, particle_class, match):
+#         """
+#         Extract a particle of the specified class and append it to the record buffer
+#         @param particle_class: particle class to extract
+#         @param match: regex match to pass in as raw data
+#         """
+#         particle = self._extract_sample(particle_class, None, match, None)
+#         self._record_buffer.append(particle)
