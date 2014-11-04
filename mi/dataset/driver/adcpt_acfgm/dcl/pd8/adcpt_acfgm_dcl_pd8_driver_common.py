@@ -12,12 +12,12 @@ from mi.core.log import get_logger
 log = get_logger()
 
 from mi.dataset.dataset_driver import DataSetDriver
-from mi.dataset.parser.adcpt_acfgm_dcl_pd8 import AdcpPd8Parser
+from mi.dataset.parser.adcpt_acfgm_dcl_pd8 import AdcptAcfgmPd8Parser
 
 
 MODULE_NAME = 'mi.dataset.parser.adcpt_acfgm_dcl_pd8'
-RECOVERED_PARTICLE_CLASS = 'AdcptPd8ARecoveredInstrumentDataParticle'
-TELEMETERED_PARTICLE_CLASS = 'AdcptPd8TelemeteredInstrumentDataParticle'
+RECOVERED_PARTICLE_CLASS = 'AdcptAcfgmPd8DclInstrumentRecoveredParticle'
+TELEMETERED_PARTICLE_CLASS = 'AdcptAcfgmPd8DclInstrumentParticle'
 
 
 class AdcptAcfgmDclPd8Driver:
@@ -36,11 +36,9 @@ class AdcptAcfgmDclPd8Driver:
                 log.debug("Exception: %s", exception)
                 self._particleDataHdlrObj.setParticleDataCaptureFailure()
 
-            parser = AdcpPd8Parser(self._parser_config,
-                                   file_handle,
-                                   lambda state, ingested: None,
-                                   lambda data: None,
-                                   exception_callback)
+            parser = AdcptAcfgmPd8Parser(self._parser_config,
+                                         file_handle,
+                                         exception_callback)
 
             driver = DataSetDriver(parser, self._particleDataHdlrObj)
 

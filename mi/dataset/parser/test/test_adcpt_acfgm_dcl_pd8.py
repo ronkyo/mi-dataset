@@ -2,12 +2,9 @@
 
 """
 @package mi.dataset.parser.test.test_adcpt_acfgm
-@fid marine-integrations/mi/dataset/parser/test/test_adcps_jln.py
-@author Jeff Roy
-@brief Test code for a Adcps_jln data parser
-Parts of this test code were taken from test_adcpa.py
-Due to the nature of the records in PD0 files, (large binary records with hundreds of parameters)
-this code verifies select items in the parsed data particle
+@fid marine-integrations/mi/dataset/parser/test/test_adcpt_acfgm.py
+@author Ronald Ronquillo
+@brief Test code for a Adcpt_Acfgm_Dcl data parser
 """
 
 from nose.plugins.attrib import attr
@@ -16,35 +13,32 @@ import os
 from mi.core.log import get_logger
 log = get_logger()
 
-from mi.core.exceptions import UnexpectedDataException
+from mi.core.exceptions import RecoverableSampleException
 
 from mi.dataset.test.test_parser import ParserUnitTestCase
 from mi.dataset.dataset_parser import DataSetDriverConfigKeys
 
-from mi.dataset.driver.adcpt_acfgm.dcl.pd8.adcpt_acfgm_dcl_pd8_driver_common import AdcpPd8Parser, \
-    MODULE_NAME, RECOVERED_PARTICLE_CLASS, TELEMETERED_PARTICLE_CLASS
+from mi.dataset.driver.adcpt_acfgm.dcl.pd8.adcpt_acfgm_dcl_pd8_driver_common import \
+    AdcptAcfgmPd8Parser, MODULE_NAME, RECOVERED_PARTICLE_CLASS, TELEMETERED_PARTICLE_CLASS
 
 from mi.dataset.test.test_parser import BASE_RESOURCE_PATH
 RESOURCE_PATH = os.path.join(BASE_RESOURCE_PATH, 'adcpt_acfgm', 'dcl', 'pd8', 'resource')
 
 
-
 @attr('UNIT', group='mi')
-class AdcpPd8ParserUnitTestCase(ParserUnitTestCase):
+class AdcptAcfgmPd8ParserUnitTestCase(ParserUnitTestCase):
     """
-    Adcp_jln Parser unit test suite
+    Adcpt_Acfgm_Dcl Parser unit test suite
     """
 
     def create_parser(self, particle_class, file_handle):
         """
-        This function creates a MetbkADcl parser for recovered data.
+        This function creates a AdcptAcfgmDcl parser for recovered data.
         """
-        parser = AdcpPd8Parser(
+        parser = AdcptAcfgmPd8Parser(
             {DataSetDriverConfigKeys.PARTICLE_MODULE: MODULE_NAME,
              DataSetDriverConfigKeys.PARTICLE_CLASS: particle_class},
             file_handle,
-            lambda state, ingested: None,
-            self.publish_callback,
             self.exception_callback)
         return parser
 
@@ -57,9 +51,9 @@ class AdcpPd8ParserUnitTestCase(ParserUnitTestCase):
 
     def particle_to_yml(self, particles, filename, mode='w'):
         """
-        This is added as a testing helper, not actually as part of the parser tests. Since the same particles
-        will be used for the driver test it is helpful to write them to .yml in the same form they need in the
-        results.yml here.
+        This is added as a testing helper, not actually as part of the parser tests. Since the same
+        particles will be used for the driver test it is helpful to write them to .yml in the same
+        form they need in the results.yml here.
         """
         # open write append, if you want to start from scratch manually delete this fid
         fid = open(os.path.join(RESOURCE_PATH, filename), mode)
@@ -90,9 +84,8 @@ class AdcpPd8ParserUnitTestCase(ParserUnitTestCase):
         """
         This utility creates a yml file
         """
-
-        #20131201.adcp.log has 23 records in it
-        fid = open(os.path.join(RESOURCE_PATH, '20131201.adcp.log'), 'rb')
+        # 20131201.adcp.log has 23 records in it, 20131201.adcp_mod.log has modified BIT values
+        fid = open(os.path.join(RESOURCE_PATH, '20131201.adcp_mod.log'), 'rb')
 
         self.stream_handle = fid
 
@@ -100,46 +93,8 @@ class AdcpPd8ParserUnitTestCase(ParserUnitTestCase):
 
         particles = self.parser.get_records(250)
 
-        self.particle_to_yml(particles, '20131201.adcp.yml')
+        self.particle_to_yml(particles, '20131201.adcp_mod.yml')
         fid.close()
-
-    def trim_file(self):
-        """
-        This utility routine can be used to trim large PD0 files down
-        to a more manageable size.  It uses the sieve in the parser to
-        create a copy of the file with a specified number of records
-        """
-
-        #define these values as needed
-
-        input_file = 'ND072022.PD0'
-        output_file = 'ND072022.PD0'
-        num_rec = 3
-        first_rec = 1
-        log.info("opening file")
-        infid = open(os.path.join(RESOURCE_PATH, input_file), 'rb')
-        in_buffer = infid.read()
-        log.info("file read")
-        stream_handle = infid
-        #parser needs a stream handle even though it won't use it
-        parser = AdcpPd8Parser(self.config_recov, None, stream_handle,
-                               self.state_callback, self.publish_callback, self.exception_callback)
-        log.info("parser created, calling sieve")
-        indices = parser.sieve_function(in_buffer)
-        #get the start and ends of all the records
-        log.info("sieve returned %d indeces", len(indices))
-        if len(indices) < first_rec + num_rec:
-            log.info('trim_file: not enough records in file no output created')
-            return
-
-        first_byte = indices[first_rec-1][0]
-        last_byte = indices[first_rec-1 + num_rec-1][1]
-        log.info('first byte is %d last_byte is %d', first_byte, last_byte)
-
-        outfid = open(os.path.join(RESOURCE_PATH, output_file), 'wb')
-        outfid.write(in_buffer[first_byte:last_byte])
-        outfid.close()
-        infid.close()
 
     def test_parse_input(self):
         """
@@ -147,8 +102,7 @@ class AdcpPd8ParserUnitTestCase(ParserUnitTestCase):
         Verification is not done at this time, but will be done in the
         tests below.
         """
-        log.debug('===== START TEST BIG GIANT INPUT RECOVERED =====')
-        in_file = self.open_file('20131201.adcp.log')
+        in_file = self.open_file('20131201.adcp_mod.log')
         parser = self.create_parser(RECOVERED_PARTICLE_CLASS, in_file)
 
         # In a single read, get all particles in this file.
@@ -158,115 +112,103 @@ class AdcpPd8ParserUnitTestCase(ParserUnitTestCase):
         in_file.close()
         self.assertListEqual(self.exception_callback_value, [])
 
-        log.debug('===== END TEST BIG GIANT INPUT =====')
 
-    def test_get_many(self):
+    def test_recov(self):
         """
         Read a file and pull out multiple data particles at one time.
         Verify that the results are those we expected.
         """
-        log.debug('===== START TEST GET MANY RECOVERED =====')
-        in_file = self.open_file('20131201.adcp.log')
+        in_file = self.open_file('20131201.adcp_mod.log')
         parser = self.create_parser(RECOVERED_PARTICLE_CLASS, in_file)
 
         # In a single read, get all particles for this file.
         result = parser.get_records(23)
 
         self.assertEqual(len(result), 23)
-        self.assert_particles(result, '20131201.adcp.yml', RESOURCE_PATH)
+        self.assert_particles(result, '20131201.adcp_mod_recov.yml', RESOURCE_PATH)
 
         self.assertListEqual(self.exception_callback_value, [])
         in_file.close()
 
-        log.debug('===== END TEST GET MANY =====')
 
-    def test_simple_recov(self):
+    def test_telem(self):
         """
-        Read test data and pull out data particles one at a time.
-        Assert that the results are those we expected.
-        The contents of ADCP_data_20130702.000 are the expected results
-        from the IDD.  These results for the that record were manually verified
-        and are the entire parsed particle is represented in ADCP_data_20130702.yml
+        Read a file and pull out multiple data particles at one time.
+        Verify that the results are those we expected.
         """
+        in_file = self.open_file('20131201.adcp_mod.log')
+        parser = self.create_parser(TELEMETERED_PARTICLE_CLASS, in_file)
 
-        # ND072022.PD0 contains a single ADCPA ensemble
-        fid = open(os.path.join(RESOURCE_PATH, 'ND072022.PD0'), 'rb')
+        # In a single read, get all particles for this file.
+        result = parser.get_records(23)
 
-        self.stream_handle = fid
-        self.parser = AdcpPd8Parser(self.config_recov, None, self.stream_handle,
-                                    self.state_callback, self.publish_callback, self.exception_callback)
+        self.assertEqual(len(result), 23)
+        self.assert_particles(result, '20131201.adcp_mod.yml', RESOURCE_PATH)
 
-        particles = self.parser.get_records(1)
+        self.assertListEqual(self.exception_callback_value, [])
+        in_file.close()
 
-        log.debug('got back %d particles', len(particles))
-
-        self.assert_particles(particles, 'ND072022_recov.yml', RESOURCE_PATH)
-
-        fid.close()
-
-    def test_simple_telem(self):
-        """
-        Read test data and pull out data particles one at a time.
-        Assert that the results are those we expected.
-        The contents of ADCP_data_20130702.000 are the expected results
-        from the IDD.  These results for the that record were manually verified
-        and are the entire parsed particle is represented in ADCP_data_20130702.yml
-        """
-
-        # ND072022.PD0 contains a single ADCPA ensemble
-        fid = open(os.path.join(RESOURCE_PATH, 'ND072022.PD0'), 'rb')
-
-        self.stream_handle = fid
-        self.parser = AdcpPd8Parser(self.config_telem, None, self.stream_handle,
-                                    self.state_callback, self.publish_callback, self.exception_callback)
-
-        particles = self.parser.get_records(1)
-
-        log.debug('got back %d particles', len(particles))
-
-        self.assert_particles(particles, 'ND072022_telem.yml', RESOURCE_PATH)
-
-        fid.close()
-
-    def test_get_many_orig(self):
-        """
-        Read test data and pull out multiple data particles at one time.
-        Assert that the results are those we expected.
-        """
-
-        #LA101636_20.PD0 has 20 records in it
-        fid = open(os.path.join(RESOURCE_PATH, 'ND072023.PD0'), 'rb')
-
-        self.stream_handle = fid
-        self.parser = AdcpPd8Parser(self.config_recov, None, self.stream_handle,
-                                    self.state_callback, self.publish_callback, self.exception_callback)
-
-        particles = self.parser.get_records(54)
-        log.info('got back %d records', len(particles))
-
-        self.assert_particles(particles, 'ND072023_recov.yml', RESOURCE_PATH)
-
-        fid.close()
 
     def test_bad_data(self):
         """
         Ensure that bad data is skipped when it exists.
         """
-        #LB180210_3_corrupted.PD0 has three records in it, the 2nd record was corrupted
-        fid = open(os.path.join(RESOURCE_PATH, '20131201.adcp_bad.log'), 'rb')
+
+        # Line 1: DCL Log missing opening square bracket
+        # Line 40: Timestamp day has a float
+        # Line 79: Heading is not a float
+        # Line 118: Temp is not a float
+        # Line 119: Header typo
+        # Line 158: Timestamp has non digit
+        # Line 197: Timestamp missing milliseconds
+        # Line 234: Bin missing
+        # Line 272: Dir missing
+        # Line 310: Mag missing
+        # Line 348: E/W missing
+        # Line 386: N/S missing
+        # Line 424: Vert missing
+        # Line 462: Err missing
+        # Line 500: Echo1 missing
+        # Line 538: Echo2 missing
+        # Line 576: Echo3 missing
+        # Line 614: Echo4 missing
+        # Line 652: Dir is not a float
+        # Line 690: Dir has a non digit
+        # Line 728: Mag is not a float
+        # Line 766: Mag has a non digit
+        # Line 804: E/W is a float
+        # Line 842: E/W has a non digit
+        # Line 880: N/S is a float
+        # Line 918: N/S is a non digit
+        # Line 956: Vert is a float
+        # Line 994: Vert is a non digit
+        # Line 1032: Err is a float
+        # Line 1070: Err has a non digit
+        # Line 1108: Echo1 is a float
+        # Line 1146: Echo1 has a non digit
+        # Line 1184: Echo2 is a float
+        # Line 1222: Echo2 has a non digit
+        # Line 1260: Echo3 is negative
+        # Line 1298: Timestamp missing secconds
+        # Line 1331: DCL Logging missing closing square bracket
+        # Line 1384: Ensemble number is a float
+        # Line 1409: Pitch is not a float
+        # Line 1448: Speed of sound is a float
+        # Line 1485: Roll is not a float
+        # Line 1523: Heading has a non digit
+        # Line 1561: Pitch has a non digit
+        # Line 1599: Roll has a non digit
+
+        fid = open(os.path.join(RESOURCE_PATH, '20131201.adcp_corrupt.log'), 'rb')
 
         parser = self.create_parser(RECOVERED_PARTICLE_CLASS, fid)
 
-        #try to get 3 particles, should only get 2 back
-        #the second one should correspond to ensemble 3
-        parser.get_records(23)
+        parser.get_records(66)
 
         for i in range(len(self.exception_callback_value)):
-            self.assert_(isinstance(self.exception_callback_value[i], UnexpectedDataException))
+            self.assert_(isinstance(self.exception_callback_value[i], RecoverableSampleException))
             log.debug('Exception: %s', self.exception_callback_value[i])
 
-        self.assert_(isinstance(self.exception_callback_value[0], UnexpectedDataException))
+        self.assert_(isinstance(self.exception_callback_value[0], RecoverableSampleException))
 
         fid.close()
-
-
