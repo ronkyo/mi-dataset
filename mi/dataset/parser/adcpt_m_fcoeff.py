@@ -1,21 +1,21 @@
 #!/usr/bin/env python
 
 """
-@package mi.dataset.parser.adcpt_m_dspec
-@file marine-integrations/mi/dataset/parser/adcpt_m_dspec.py
-@author Tapana Gupta
-@brief Parser for the adcpt_m_dspec dataset driver
+@package mi.dataset.parser.adcpt_m_fcoeff
+@file marine-integrations/mi/dataset/parser/adcpt_m_fcoeff.py
+@author Ronald Ronquillo
+@brief Parser for the adcpt_m_fcoeff dataset driver
 
 This file contains ...
 
-__author__ = 'tgupta'
+__author__ = 'Ronald Ronquillo'
 
 Release notes:
 
 Initial Release
 """
 
-__author__ = 'Tapana Gupta'
+__author__ = 'Ronald Ronquillo'
 __license__ = 'Apache 2.0'
 
 
@@ -25,8 +25,7 @@ import re
 
 from mi.core.exceptions import \
     SampleException, \
-    RecoverableSampleException, \
-    UnexpectedDataException
+    RecoverableSampleException
 
 from mi.dataset.dataset_parser import SimpleParser
 
@@ -41,7 +40,6 @@ from mi.core.common import BaseEnum
 
 from mi.dataset.parser.common_regexes import \
     UNSIGNED_INT_REGEX, \
-    INT_REGEX, \
     FLOAT_REGEX, \
     END_OF_LINE_REGEX, \
     SPACE_REGEX, \
@@ -60,12 +58,11 @@ EMPTY_LINE_MATCHER = re.compile(EMPTY_LINE_REGEX, re.DOTALL)
 
 INT_GROUP_REGEX = r'(' + UNSIGNED_INT_REGEX + ')'
 FLOAT_GROUP_REGEX = r'(' + FLOAT_REGEX + ')'
-INT_OR_FLOAT_GROUP_REGEX = r'(' + INT_REGEX + '|' + FLOAT_REGEX + ')'
 
 # regex for identifying start of a header line
 START_METADATA = ZERO_OR_MORE_WHITESPACE_REGEX + '\%'
 
-# Regex to extract the timestamp from the DSpec log file path (path/to/DSpecYYMMDDHHmm.txt)
+# Regex to extract the timestamp from the FCoeff log file path (path/to/FCoeffYYMMDDHHmm.txt)
 FILE_NAME_REGEX = r'.+FCoeff([0-9]+)\.txt'
 FILE_NAME_MATCHER = re.compile(FILE_NAME_REGEX, re.DOTALL)
 
@@ -120,74 +117,35 @@ HEADER_MATCHER_LIST = [DIR_FREQ_MATCHER, FREQ_BAND_MATCHER]
 FCOEFF_DATA_REGEX = r'((' + SPACE_REGEX + FLOAT_REGEX + ')+)' + END_OF_LINE_REGEX
 FCOEFF_DATA_MATCHER = re.compile(FCOEFF_DATA_REGEX, re.DOTALL)
 
-
-
-# Code alg
-"""
-While
-    try matcher on line
-    if fails
-        if '# matches' == 'N' and "current_#_of_matches" > 1 (not first time using matcher)
-            try next matcher, maybe store line & error
-        else
-            output error line & other pending errors?
-    else
-        call processing_function()
-        if successful, extend parsed_data[] with output
-        if '# matches' == 1
-            move to next
-        else '# matches' is > "current_#_of_matches" or  == 'N'
-            same matcher
-
-    # keep track/count of errors, don't publish in event of errors
-
-
-    line = readline()
-
-check tracked errors...
-
-final_error_checking()
-
-output particle()
-"""
-PARTICLE_MULTI_LINE_MAP = [
-    # Matcher, # matches, Error message if match fails, extend_ouput f(raw_data)
-    (DIR_FREQ_MATCHER,      1, "Error excepting blah"),
-    (FREQ_BAND_MATCHER,     1, "Error excepting blah"),
-    (FCOEFF_DATA_MATCHER,   'N', "Error excepting blah")
-
-]
-
-
 FCOEFF_DATA_MAP = [
-    ('file_time',           0, str),
-    ('num_fields',          1, int),
-    ('num_freq',            2, int),
-    ('freq_w_band',         3, float),
-    ('freq_0',              4, float),
-    ('frequency_band',      5, list),
-    ('bandwidth_band',      6, list),
-    ('energy_density_band', 7, list),
-    ('direction_band',      8, list),
-    ('a1_band',             9, list),
-    ('b1_band',             10, list),
-    ('a2_band',             11, list),
-    ('b2_band',             12, list),
-    ('check_factor_band',   13, list)
+    ('file_time',           0,  str),
+    ('num_fields',          1,  int),
+    ('num_freq',            2,  int),
+    ('freq_w_band',         3,  float),
+    ('freq_0',              4,  float),
+    ('frequency_band',      5,  lambda x: [float(y) for y in x]),
+    ('bandwidth_band',      6,  lambda x: [float(y) for y in x]),
+    ('energy_density_band', 7,  lambda x: [float(y) for y in x]),
+    ('direction_band',      8,  lambda x: [float(y) for y in x]),
+    ('a1_band',             9,  lambda x: [float(y) for y in x]),
+    ('b1_band',             10, lambda x: [float(y) for y in x]),
+    ('a2_band',             11, lambda x: [float(y) for y in x]),
+    ('b2_band',             12, lambda x: [float(y) for y in x]),
+    ('check_factor_band',   13, lambda x: [float(y) for y in x])
 ]
 
-# Position of 'file_time' in DSPEC_DATA_MAP
+# Position of 'file_time' in FCOEFF_DATA_MAP
 FILE_TIME_POSITION = 0
 
 
 class DataParticleType(BaseEnum):
     """
-    Class that defines the data particles generated from the adcpt_m Dspec recovered data
+    Class that defines the data particles generated from the adcpt_m FCoeff recovered data
     """
     SAMPLE = 'adcpt_m_instrument_fcoeff_recovered'  # instrument data particle
 
 
-# class AdcptMDspecDataParticleKey(BaseEnum):
+# class AdcptMFCoeffDataParticleKey(BaseEnum):
 #     """
 #     Class that defines fields that need to be extracted from the data
 #     """
@@ -200,16 +158,16 @@ class DataParticleType(BaseEnum):
 #     DIR_SURFACE_SPECTRUM = "directional_surface_spectrum"
 
 
-class AdcptMDspecInstrumentDataParticle(DataParticle):
+class AdcptMFCoeffInstrumentDataParticle(DataParticle):
     """
-    Class for generating the adcpt_m_instrument_dspec_recovered data particle.
+    Class for generating the adcpt_m_instrument_fcoeff_recovered data particle.
     """
 
     _data_particle_type = DataParticleType.SAMPLE
 
     def __init__(self, raw_data, *args, **kwargs):
 
-        super(AdcptMDspecInstrumentDataParticle, self).__init__(raw_data, *args, **kwargs)
+        super(AdcptMFCoeffInstrumentDataParticle, self).__init__(raw_data, *args, **kwargs)
 
         # construct the timestamp from the file time
         file_time = self.raw_data[FILE_TIME_POSITION]
@@ -228,7 +186,7 @@ class AdcptMDspecInstrumentDataParticle(DataParticle):
             elapsed_seconds = calendar.timegm(timestamp)
             self.set_internal_timestamp(unix_time=elapsed_seconds)
         else:
-            raise SampleException("AdcptMDspecInstrumentDataParticle: Unable to construct \
+            raise SampleException("AdcptMFCoeffInstrumentDataParticle: Unable to construct \
                                   internal timestamp from file time: %s", file_time)
 
         self.instrument_particle_map = FCOEFF_DATA_MAP
@@ -253,24 +211,15 @@ class AdcptMDspecInstrumentDataParticle(DataParticle):
         return data_particle
 
 
-class AdcptMDspecParser(SimpleParser):
+class AdcptMFCoeffParser(SimpleParser):
 
     """
-    Parser for adcpt_m DSpec*.txt files.
+    Parser for adcpt_m FCoeff*.txt files.
     """
-    def __init__(self,
-                 config,
-                 stream_handle,
-                 exception_callback):
-
-
-        super(AdcptMDspecParser, self).__init__(config,
-                                              stream_handle,
-                                              exception_callback)
 
     def parse_file(self):
         """
-        Parse the DSpec*.txt file. Create a chunk from valid data in the file.
+        Parse the FCoeff*.txt file. Create a chunk from valid data in the file.
         Build a data particle from the chunk.
         """
 
@@ -280,9 +229,8 @@ class AdcptMDspecParser(SimpleParser):
         num_freq = 0
         freq_w_band = 0.0
         freq_0 = 0.0
-        start_dir = 0.0
 
-        dspec_matrix = []
+        fcoeff_matrix = []
 
         # Extract the file time from the file name
         input_file_name = self._stream_handle.name
@@ -294,8 +242,8 @@ class AdcptMDspecParser(SimpleParser):
         if match:
             file_time = match.group(1)
         else:
-            error_message = 'Unable to extract file time from DSpec input file name: %s '\
-                                        % input_file_name
+            error_message = 'Unable to extract file time from FCoeff input file name: %s '\
+                            % input_file_name
             log.warn(error_message)
             self._exception_callback(RecoverableSampleException(error_message))
 
@@ -339,7 +287,8 @@ class AdcptMDspecParser(SimpleParser):
                 # Extract a row of the Directional Surface Spectrum matrix
                 sensor_match = FCOEFF_DATA_MATCHER.match(line)
                 data = sensor_match.group(1)
-                values = [float(x) for x in data.split()]
+                # values = [float(x) for x in data.split()]
+                values = data.split()
 
                 num_values = len(values)
 
@@ -351,8 +300,8 @@ class AdcptMDspecParser(SimpleParser):
                     log.warn(error_message)
                     self._exception_callback(RecoverableSampleException(error_message))
                 else:
-                    # Add the row to the dspec matrix
-                    dspec_matrix.append(values)
+                    # Add the row to the fcoeff matrix
+                    fcoeff_matrix.append(values)
 
             else:
                 # Generate a warning for unknown data
@@ -365,27 +314,30 @@ class AdcptMDspecParser(SimpleParser):
 
         # Check to see if the specified number of directions and frequencies were retrieved from the data
 
-        dspec_matrix_length = len(dspec_matrix)
-        if dspec_matrix_length != num_freq:
+        fcoeff_matrix_length = len(fcoeff_matrix)
+        if fcoeff_matrix_length != num_freq:
             error_message = 'Unexpected Number of frequencies in FCoeff Matrix: expected %s, got %s'\
-                            % (num_freq, dspec_matrix_length)
+                            % (num_freq, fcoeff_matrix_length)
             log.warn(error_message)
             self._exception_callback(RecoverableSampleException(error_message))
 
-
-
         # Construct the parsed data list to hand over to the Data Particle class for particle creation
+
+        np_array = numpy.array(fcoeff_matrix)
+
         parsed_data = [
-            file_time,  # ('file_time', 0, str),
-            num_fields,  # ('num_dir', 1, int),
-            num_freq,  # ('num_freq', 2, int),
-            freq_w_band,  # ('freq_w_band', 3, float),
-            freq_0,  # ('freq_0', 4, float),
-            dspec_matrix  # ('directional_surface_spectrum', 6, list)]
+            file_time,      # ('file_time', 0, str),
+            num_fields,     # ('num_dir', 1, int),
+            num_freq,       # ('num_freq', 2, int),
+            freq_w_band,    # ('freq_w_band', 3, float),
+            freq_0          # ('freq_0', 4, float),
         ]
 
-        #log.debug('Parsed data: %s' % parsed_data)
+        parsed_data.extend(np_array.transpose().tolist())
+
+        # log.debug('Parsed data: %s' % parsed_data)
 
         # Extract a particle and append it to the record buffer
-        particle = self._extract_sample(AdcptMDspecInstrumentDataParticle, None, parsed_data, None)
+        particle = self._extract_sample(AdcptMFCoeffInstrumentDataParticle, None, parsed_data, None)
+        log.debug('Parsed particle: %s' % particle.generate_dict())
         self._record_buffer.append(particle)
