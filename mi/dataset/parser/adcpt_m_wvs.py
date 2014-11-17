@@ -38,9 +38,14 @@ __license__ = 'Apache 2.0'
 import ntplib
 import re
 import struct
+import sys
 from itertools import chain
+from collections import namedtuple
 
 from mi.dataset.parser import utilities
+from functools import partial
+from mi.core.instrument.chunker import StringChunker
+from mi.dataset.dataset_parser import BufferLoadingParser, DataSetDriverConfigKeys
 
 from mi.core.exceptions import RecoverableSampleException
 
@@ -62,42 +67,139 @@ from mi.dataset.parser.common_regexes import \
 
 
 #Data Type IDs
-Header =                    '\x7f\x7a'
-Fixed_Leader =              '\x00\x01'
-Variable_Leader =           '\x00\x02'
-Velocity_Time_Series =      '\x00\x03'
-Amplitude_Time_Series =     '\x00\x04'
-Surface_Time_Series =       '\x00\x05'
-Pressure_Time_Series =      '\x00\x06'
-Velocity_Spectrum =         '\x00\x07'
-Surface_Track_Spectrum =    '\x00\x08'
-Pressure_Spectrum =         '\x00\x09'
-Directional_Spectrum =      '\x00\x0A'
-Wave_Parameters =           '\x00\x0B'
-Wave_Parameters2 =          '\x00\x0C'
-Surface_Dir_Spectrum =              '\x00\x0D'
-Heading_Pitch_Roll_Time_Series =    '\x00\x0E'
-Bottom_Velocity_Time_Series =       '\x00\x0F'
-Altitude_Time_Series =              '\x00\x10'
+# Header =                    '\x7f\x7a'
+# Fixed_Leader =              '\x00\x01'
+# Variable_Leader =           '\x00\x02'
+# Velocity_Time_Series =      '\x00\x03'
+# Amplitude_Time_Series =     '\x00\x04'
+# Surface_Time_Series =       '\x00\x05'
+# Pressure_Time_Series =      '\x00\x06'
+# Velocity_Spectrum =         '\x00\x07'
+# Surface_Track_Spectrum =    '\x00\x08'
+# Pressure_Spectrum =         '\x00\x09'
+# Directional_Spectrum =      '\x00\x0A'
+# Wave_Parameters =           '\x00\x0B'
+# Wave_Parameters2 =          '\x00\x0C'
+# Surface_Dir_Spectrum =              '\x00\x0D'
+# Heading_Pitch_Roll_Time_Series =    '\x00\x0E'
+# Bottom_Velocity_Time_Series =       '\x00\x0F'
+# Altitude_Time_Series =              '\x00\x10'
 
 class AdcptMWVSParticleKey(BaseEnum):
     """
     Class that defines fields that need to be extracted from the data
     """
     FILE_TIME = "file_time"
-    NUM_FIELDS = "num_fields"
-    NUM_FREQ = "num_freq"
-    FREQ_W_BAND = "freq_w_band"
-    FREQ_0 = "freq_0"
-    FREQ_BAND = "frequency_band"
-    BANDWIDTH_BAND = "bandwidth_band"
-    ENERGY_BAND = "energy_density_band"
-    DIR_BAND = "direction_band"
-    A1_BAND = "a1_band"
-    B1_BAND = "b1_band"
-    A2_BAND = "a2_band"
-    B2_BAND = "b2_band"
-    CHECK_BAND = "check_factor_band"
+    SEQUENCE_NUMBER = "sequence_number"
+    FILE_MODE = "file_mode"
+    REC_TIME_SERIES = "rec_time_series"
+    REC_SPECTRA = "rec_spectra"
+    REC_DIR_SPEC = "rec_dir_spec"
+    SAMPLES_PER_BURST = "samples_per_burst"
+    TIME_BETWEEN_SAMPLES = "time_between_samples"
+    TIME_BETWEEN_BURSTS_SEC = "time_between_bursts_sec"
+    BIN_SIZE = "bin_size"
+    BIN_1_MIDDLE = "bin_1_middle"
+    NUM_RANGE_BINS = "num_range_bins"
+    NUM_VEL_BINS = "num_vel_bins"
+    NUM_INT_BINS = "num_int_bins"
+    NUM_BEAMS = "num_beams"
+    BEAM_CONF = "beam_conf"
+    WAVE_PARAM_SOURCE = "wave_param_source"
+    NFFT_SAMPLES = "nfft_samples"
+    NUM_DIRECTIONAL_SLICES = "num_directional_slices"
+    NUM_FREQ_BINS = "num_freq_bins"
+    WINDOW_TYPE = "window_type"
+    USE_PRESS_4_DEPTH = "use_press_4_depth"
+    USE_STRACK_4_DEPTH = "use_strack_4_depth"
+    STRACK_SPEC = "strack_spec"
+    PRESS_SPEC = "press_spec"
+    VEL_MIN = "vel_min"
+    VEL_MAX = "vel_max"
+    VEL_STD = "vel_std"
+    VEL_MAX_CHANGE = "vel_max_change"
+    VEL_PCT_GD = "vel_pct_gd"
+    SURF_MIN = "surf_min"
+    SURF_MAX = "surf_max"
+    SURF_STD = "surf_std"
+    SURF_MAX_CHNG = "surf_max_chng"
+    SURF_PCT_GD = "surf_pct_gd"
+    TBE_MAX_DEV = "tbe_max_dev"
+    H_MAX_DEV = "h_max_dev"
+    PR_MAX_DEV = "pr_max_dev"
+    NOM_DEPTH = "nom_depth"
+    CAL_PRESS = "cal_press"
+    DEPTH_OFFSET = "depth_offset"
+    CURRENTS = "currents"
+    SMALL_WAVE_FREQ = "small_wave_freq"
+    SMALL_WAVE_THRESH = "small_wave_thresh"
+    TILTS = "tilts"
+    FIXED_PITCH = "fixed_pitch"
+    FIXED_ROLL = "fixed_roll"
+    BOTTOM_SLOPE_X = "bottom_slope_x"
+    BOTTOM_SLOPE_Y = "bottom_slope_y"
+    DOWN = "down"
+    TRANS_V2_SURF = "trans_v2_surf"
+    SCALE_SPEC = "scale_spec"
+    SAMPLE_RATE = "sample_rate"
+    FREQ_THRESH = "freq_thresh"
+    DUMMY_SURF = "dummy_surf"
+    REMOVE_BIAS = "remove_bias"
+    DIR_CUTOFF = "dir_cutoff"
+    HEADING_VARIATION = "heading_variation"
+    SOFT_REV = "soft_rev"
+    CLIP_PWR_SPEC = "clip_pwr_spec"
+    DIR_P2 = "dir_p2"
+    HORIZONTAL = "horizontal"
+    START_TIME = "start_time"
+    STOP_TIME = "stop_time"
+    FREQ_LO = "freq_lo"
+    AVERAGE_DEPTH = "average_depth"
+    ALTITUDE = "altitude"
+    BIN_MAP = "bin_map"
+    DISC_FLAG = "disc_flag"
+    PCT_GD_PRESS = "pct_gd_press"
+    AVG_SS = "avg_ss"
+    AVG_TEMP = "avg_temp"
+    PCT_GD_SURF = "pct_gd_surf"
+    PCT_GD_VEL = "pct_gd_vel"
+    HEADING_OFFSET = "heading_offset"
+    HS_STD = "hs_std"
+    VS_STD = "vs_std"
+    PS_STD = "ps_std"
+    DS_FREQ_HI = "ds_freq_hi"
+    VS_FREQ_HI = "vs_freq_hi"
+    PS_FREQ_HI = "ps_freq_hi"
+    SS_FREQ_HI = "ss_freq_hi"
+    X_VEL = "x_vel"
+    Y_VEL = "y_vel"
+    AVG_PITCH = "avg_pitch"
+    AVG_ROLL = "avg_roll"
+    AVG_HEADING = "avg_heading"
+    SAMPLES_COLLECTED = "samples_collected"
+    VSPEC_PCT_MEASURED = "vspec_pct_measured"
+    VSPEC_NUM_FREQ = "vspec_num_freq"
+    VSPEC_DAT = "vspec_dat"
+    SSPEC_NUM_FREQ = "sspec_num_freq"
+    SSPEC_DAT = "sspec_dat"
+    PSPEC_NUM_FREQ = "pspec_num_freq"
+    PSPEC_DAT = "pspec_dat"
+    DSPEC_NUM_FREQ = "dspec_num_freq"
+    DSPEC_NUM_DIR = "dspec_num_dir"
+    DSPEC_GOOD = "dspec_good"
+    DSPEC_DAT = "dspec_dat"
+    WAVE_HS1 = "wave_hs1"
+    WAVE_TP1 = "wave_tp1"
+    WAVE_DP1 = "wave_dp1"
+    WAVE_HS2 = "wave_hs2"
+    WAVE_TP2 = "wave_tp2"
+    WAVE_DP2 = "wave_dp2"
+    WAVE_DM = "wave_dm"
+    HPR_NUM_SAMPLES = "hpr_num_samples"
+    BEAM_ANGLE = "beam_angle"
+    HEADING_TIME_SERIES = "heading_time_series"
+    PITCH_TIME_SERIES = "pitch_time_series"
+    ROLL_TIME_SERIES = "roll_time_series"
 
 # Basic patterns
 common_matches = {
@@ -126,78 +228,49 @@ FILE_NAME_MATCHER = re.compile(r"""(?x)
 # Metadata starts with '%' or ' %' followed by text &  newline, ie:
 # % Fourier Coefficients
 # % Frequency(Hz), Band width(Hz), Energy density(m^2/Hz), Direction (deg), A1, B1, A2, B2, Check Factor
-# HEADER_MATCHER = re.compile(r"""(?x)
-#     %(START_METADATA)s %(ANY_CHARS_REGEX)s %(END_OF_LINE_REGEX)s
-#     """ % common_matches, re.VERBOSE | re.DOTALL)
-
 
 # \x7f\x7a <Spare1>{2} <record_size>{4} <Spares2-4>{3} <NumDataTypes> {1} <Offsets> {4x9}
 HEADER_MATCHER = re.compile(r"""(?x)
-    \x7f\x7a(?P<Spare1> (.{2})) (?P<Record_Size> (.{4})) (?P<Spare2_4> (.{3}))
-    (?P<NumDataTypes> (.)) (?P<Offsets> (.{36}))
-    %(ANY_CHARS_REGEX)s %(END_OF_LINE_REGEX)s
+    \x7f\x7a(?P<Spare1> (.){2}) (?P<Record_Size> (.{4})) (?P<Spare2_4> (.){3}) (?P<NumDataTypes> (.))
     """ % common_matches, re.VERBOSE | re.DOTALL)
 
 
-# Extract num_fields and num_freq from the following metadata line
-# % 9 Fields and 64 Frequencies
-DIR_FREQ_MATCHER = re.compile(r"""(?x)
-    %(START_METADATA)s
-    (?P<%(NUM_FIELDS)s> %(UINT)s) %(ONE_OR_MORE_WHITESPACE)s Fields\sand %(ONE_OR_MORE_WHITESPACE)s
-    (?P<%(NUM_FREQ)s>   %(UINT)s) %(ONE_OR_MORE_WHITESPACE)s Frequencies %(END_OF_LINE_REGEX)s
-    """ % common_matches, re.VERBOSE | re.DOTALL)
 
-# Extract freq_w_band and freq_0 from the following metadata line
-# % Frequency Bands are 0.01562500 Hz wide(first frequency band is centered at 0.00830078)
-FREQ_BAND_MATCHER = re.compile(r"""(?x)
-    %(START_METADATA)s
-    Frequency\sBands\sare\s (?P<%(FREQ_W_BAND)s> %(FLOAT)s)
-    %(ONE_OR_MORE_WHITESPACE)s Hz\swide
-    \(first\sfrequency\sband\sis\scentered\sat\s (?P<%(FREQ_0)s> %(FLOAT)s) \) %(END_OF_LINE_REGEX)s
-    """ % common_matches, re.VERBOSE | re.DOTALL)
-
-# List of possible matchers for header data
-HEADER_MATCHER_LIST = [DIR_FREQ_MATCHER, FREQ_BAND_MATCHER]
-
-# Regex for identifying a single record of WVS data, ie:
-#  0.008789 0.015625 0.003481 211.254501 -0.328733 -0.199515 -0.375233 0.062457 0.352941
-FCOEFF_DATA_MATCHER = re.compile(r"""(?x)
-    \s(?P<%(FREQ_BAND)s>      %(FLOAT)s)
-    \s(?P<%(BANDWIDTH_BAND)s> %(FLOAT)s)
-    \s(?P<%(ENERGY_BAND)s>    %(FLOAT)s)
-    \s(?P<%(DIR_BAND)s>       %(FLOAT)s)
-    \s(?P<%(A1_BAND)s>        %(FLOAT)s)
-    \s(?P<%(B1_BAND)s>        %(FLOAT)s)
-    \s(?P<%(A2_BAND)s>        %(FLOAT)s)
-    \s(?P<%(B2_BAND)s>        %(FLOAT)s)
-    \s(?P<%(CHECK_BAND)s>     %(FLOAT)s)
-    %(END_OF_LINE_REGEX)s
-    """ % common_matches, re.VERBOSE | re.DOTALL)
 
 
 FCOEFF_ENCODING_RULES = [
-    (AdcptMWVSParticleKey.FILE_TIME,         str),
-    (AdcptMWVSParticleKey.NUM_FIELDS,        int),
-    (AdcptMWVSParticleKey.NUM_FREQ,          int),
-    (AdcptMWVSParticleKey.FREQ_W_BAND,       float),
-    (AdcptMWVSParticleKey.FREQ_0,            float),
-    (AdcptMWVSParticleKey.FREQ_BAND,         lambda x: [float(y) for y in x]),
-    (AdcptMWVSParticleKey.BANDWIDTH_BAND,    lambda x: [float(y) for y in x]),
-    (AdcptMWVSParticleKey.ENERGY_BAND,       lambda x: [float(y) for y in x]),
-    (AdcptMWVSParticleKey.DIR_BAND,          lambda x: [float(y) for y in x]),
-    (AdcptMWVSParticleKey.A1_BAND,           lambda x: [float(y) for y in x]),
-    (AdcptMWVSParticleKey.B1_BAND,           lambda x: [float(y) for y in x]),
-    (AdcptMWVSParticleKey.A2_BAND,           lambda x: [float(y) for y in x]),
-    (AdcptMWVSParticleKey.B2_BAND,           lambda x: [float(y) for y in x]),
-    (AdcptMWVSParticleKey.CHECK_BAND,        lambda x: [float(y) for y in x])
+    (AdcptMWVSParticleKey.FILE_MODE, 'B', int),  #, num_to_unpack, encoding_func)    # num_to_unpack points to another "name" or is None?
+    (AdcptMWVSParticleKey.REC_TIME_SERIES, 'B', int),
+    (AdcptMWVSParticleKey.REC_SPECTRA, 'B', int),
+    (AdcptMWVSParticleKey.REC_DIR_SPEC, 'B', int),
+    (AdcptMWVSParticleKey.SAMPLES_PER_BURST, 'H', int),
+    (AdcptMWVSParticleKey.TIME_BETWEEN_SAMPLES, 'H', int),
+    (AdcptMWVSParticleKey.TIME_BETWEEN_BURSTS_SEC, 'H', int),
+    (AdcptMWVSParticleKey.BIN_SIZE, 'H', int),
+    (AdcptMWVSParticleKey.BIN_1_MIDDLE, 'H', int),
+    (AdcptMWVSParticleKey.NUM_RANGE_BINS, 'B', int),
+    (AdcptMWVSParticleKey.NUM_VEL_BINS, 'B', int),
+    (AdcptMWVSParticleKey.NUM_INT_BINS, 'B', int),
+    (AdcptMWVSParticleKey.NUM_BEAMS, 'B', int),
+    (AdcptMWVSParticleKey.BEAM_CONF, 'B', int),
+    (AdcptMWVSParticleKey.WAVE_PARAM_SOURCE, 'B', int),
+    (AdcptMWVSParticleKey.NFFT_SAMPLES, 'H', int),
+    (AdcptMWVSParticleKey.NUM_DIRECTIONAL_SLICES, 'H', int),
+    (AdcptMWVSParticleKey.NUM_FREQ_BINS, 'H', int),
+    (AdcptMWVSParticleKey.WINDOW_TYPE, 'H', int),
+    (AdcptMWVSParticleKey.USE_PRESS_4_DEPTH, 'B', int),
+    (AdcptMWVSParticleKey.USE_STRACK_4_DEPTH, 'B', int),
+    (AdcptMWVSParticleKey.STRACK_SPEC, 'B', int),
+    (AdcptMWVSParticleKey.PRESS_SPEC, 'B', int)
 ]
+
 
 
 class DataParticleType(BaseEnum):
     """
     Class that defines the data particles generated from the adcpt_m WVS recovered data
     """
-    SAMPLE = 'adcpt_m_instrument_wvs_recovered'  # instrument data particle
+    SAMPLE = 'adcpt_m_wvs_recovered'  # instrument data particle
 
 
 class AdcptMWVSInstrumentDataParticle(DataParticle):
@@ -222,7 +295,220 @@ class AdcptMWVSInstrumentDataParticle(DataParticle):
                 for name, function in FCOEFF_ENCODING_RULES]
 
 
-class AdcptMWVSParser(SimpleParser):
+class AdcptMWVSRecoveredInstrumentDataParticle(AdcptMWVSInstrumentDataParticle):
+    """
+    Class for generating Offset Data Particles from Recovered data.
+    """
+    _data_particle_type = DataParticleType.SAMPLE
+
+
+class AdcptMWVSParser(BufferLoadingParser):
+    """
+    Parser for dcl data.
+    In addition to the standard constructor parameters,
+    this constructor takes additional parameters sensor_data_matcher
+    and metadata_matcher
+    """
+
+    particle_count = 0
+
+    def __init__(self,
+                 config,
+                 stream_handle,
+                 *args, **kwargs):
+
+        # Default the position within the file to the beginning.
+        self.input_file = stream_handle
+        # record_matcher = kwargs.get('record_matcher', RECORD_MATCHER)
+
+        # No fancy sieve function needed for this parser.
+        # File is ASCII with records separated by newlines.
+        super(AdcptMWVSParser, self).__init__(
+            config,
+            stream_handle,
+            None,
+            self.sieve_function,
+            *args, **kwargs)
+
+    def sieve_function(self, input_buffer):
+        """
+        Sort through the input buffer looking for a data record.
+        A data record is considered to be properly framed if there is a
+        sync word and the checksum matches.
+        Arguments:
+          input_buffer - the contents of the input stream
+        Returns:
+          A list of start,end tuples
+        """
+
+        #log.debug("sieve called with buffer of length %d", len(input_buffer))
+
+        indices_list = []  # initialize the return list to empty
+
+        # log.warn("TEST BUFF: %s", input_buffer)
+
+        # File is being read 1024 bytes at a time
+        # Match up to the "number of data types"
+        first_match = HEADER_MATCHER.search(input_buffer)
+
+        # NOTE: reassess this, take into account erroneous data causing shifts
+
+        # wait till an entire header structure is found, including offsets
+        if first_match:
+            record_start = first_match.start()
+            record_end = record_start + struct.unpack('I', first_match.group('Record_Size'))[0]
+            num_data = struct.unpack('B', first_match.group('NumDataTypes'))[0]
+
+            # Get a whole record
+            if len(input_buffer) >= record_end:
+                indices_list.append((record_start, record_end))
+                log.warn("FOUND RECORD %s:%s at %s with %s data types", record_start, record_end,
+                         self._stream_handle.tell(), num_data)
+
+            # Get the header, then the parts? Needs control of the reading...
+
+
+
+        # #find all occurrences of the record header sentinel
+        # for match in HEADER_MATCHER.finditer(input_buffer):
+        #
+        #     record_start = match.start()
+        #
+        #     Record_Size = struct.unpack('I', match.group('Record_Size'))
+        #
+        #
+        #     log.warn("sieve function found sentinel at byte  %d", record_start)
+        #
+        #     # num_bytes = struct.unpack("<H", input_buffer[record_start + 2: record_start + 4])[0]
+        #     # get the number of bytes in the record, does not include the 2 checksum bytes
+        #
+        #     record_end = record_start + Record_Size[0]
+        #
+        #     #log.debug("sieve function number of bytes= %d , record end is %d", num_bytes, record_end)
+        #
+        #     #if there is enough in the buffer check the record
+        #     # if record_end <= len(input_buffer):
+        #     #     #make sure the checksum bytes are in the buffer too
+        #     #
+        #     #
+        #     #     indices_list.append((record_start, record_end))
+        #     #
+        #     #     #log.debug("sieve function found record.  Start = %d End = %d", record_start, record_end)
+
+        return indices_list
+
+    def handle_non_data(self, non_data, non_end, start):
+        """
+        Handle any non-data that is found in the file
+        """
+        # Handle non-data here.
+        # Increment the position within the file.
+        # Use the _exception_callback.
+        if non_data is not None and non_end <= start:
+            log.warn("Found %d bytes of un-expected non-data %s" %
+                     (len(non_data), non_data))
+
+            # self._exception_callback(UnexpectedDataException(
+            #     "Found %d bytes of un-expected non-data %s" %
+            #     (len(non_data), non_data)))
+
+    def parse_chunks(self):
+        """
+        Parse out any pending data chunks in the chunker.
+        If it is valid data, build a particle.
+        Go until the chunker has no more valid data.
+        @retval a list of tuples with sample particles encountered in this
+            parsing, plus the state.
+        """
+        result_particles = []
+        nd_timestamp, non_data, non_start, non_end = self._chunker.get_next_non_data_with_index(clean=False)
+        timestamp, chunk, start, end = self._chunker.get_next_data_with_index(clean=True)
+        self.handle_non_data(non_data, non_end, start)
+
+        # # If not set from config & no InstrumentParameterException error from constructor
+        # if self.particle_classes is None:
+        #     self.particle_classes = (self._particle_class,)
+
+        while chunk:
+
+            # log.warn("TEST PRINT: %r", ''.join([hex(ord(ch)) for ch in chunk]))
+            self.particle_count += 1
+            log.warn("TEST INDICES: %s:%s #%s", start, end, self.particle_count)
+
+            Header = namedtuple('Header', 'id1 id2 spare0 spare1 record_size spare2 spare3 spare4 num_data_types')
+            header_dict = {}
+            header_dict = Header._asdict(Header._make(struct.unpack_from('<4bI3bB', chunk)))
+
+
+
+
+
+
+            # get offsets % header_dict['num_data_types']
+
+            offsets = struct.unpack_from('<%sI' % header_dict['num_data_types'], chunk, 12)
+
+            log.warn("UNPACKED: %s\n%s", header_dict, offsets)
+
+            # unpack IDs from those offsets
+
+            for offset in offsets:
+                data_type_id = struct.unpack_from('h', chunk, offset)
+                log.warn("TEST PRINT: %r", ''.join([hex(ch) for ch in data_type_id]))
+
+
+            # fmt = "".join([x[1] for x in FCOEFF_ENCODING_RULES]) # add the '<'?
+
+            # Fixed_Leader = namedtuple('Fixed_Leader', " ".join([x[0] for x in FCOEFF_ENCODING_RULES]))
+            # fixed_leader_dict = Fixed_Leader._asdict(Fixed_Leader._make(struct.unpack_from(
+            #     fmt, chunk, offsets[0]+2)))
+            #
+            # log.warn("TEST1: %s: %s", fmt, fixed_leader_dict)
+
+            fmt_sizes = {
+                'H': 2,
+                'B': 1
+            }
+
+
+            position = offsets[0] + 2   # +2 offset for the type
+            fixed_leader_dict2 = {}
+            for key, formatter, enc in FCOEFF_ENCODING_RULES:
+                value = struct.unpack_from('<%s' % formatter, chunk, position)[0]
+                fixed_leader_dict2.update({key: value})
+                position += fmt_sizes[formatter]
+                # put this into _build_parsed_values & call encode_value() directly to add to list!
+
+            log.warn("TEST2: %s", fixed_leader_dict2)
+
+
+            # if sensor_match is not None:
+            #     particle = self._extract_sample(particle_class,
+            #                                     None,
+            #                                     sensor_match.groups(),
+            #                                     None)
+            #     if particle is not None:
+            #         result_particles.append((particle, None))
+            #
+            # # It's not a sensor data record, see if it's a metadata record.
+            # else:
+            #
+            #     # If it's a valid metadata record, ignore it.
+            #     # Otherwise generate warning for unknown data.
+            #     meta_match = self.metadata_matcher.match(chunk)
+            #     if meta_match is None:
+            #         error_message = 'Unknown data found in chunk %s' % chunk
+            #         log.warn(error_message)
+            #         self._exception_callback(UnexpectedDataException(error_message))
+
+            nd_timestamp, non_data, non_start, non_end = self._chunker.get_next_non_data_with_index(clean=False)
+            timestamp, chunk, start, end = self._chunker.get_next_data_with_index(clean=True)
+            self.handle_non_data(non_data, non_end, start)
+
+        return result_particles
+
+
+class AdcptMWVSParser2(SimpleParser):
     """
     Parser for adcpt_m WVS*.txt files.
     """
@@ -264,20 +550,29 @@ class AdcptMWVSParser(SimpleParser):
         #         'Unable to extract file time from WVS input file name: %s ' % input_file_name)
 
         # read the first line in the file
-        line = self._stream_handle.readline()
+        # line = self._stream_handle.readline()
+        line = self._stream_handle.read(38850)
 
         while line:
 
-            log.warn("TEST PRINT: %r", line)
+            log.warn("TEST PRINT: %r", ''.join([hex(ord(ch)) for ch in line]))
+
             if HEADER_MATCHER.match(line):
                 match = HEADER_MATCHER.match(line)
                 log.warn("TEST REGEX: %s", match.groupdict())
 
-                Record_Size = struct.unpack('I', match.group('Record_Size'))
-                log.warn("TEST UNPACK: %s", Record_Size)
+                # Record_Size = struct.unpack('I', match.group('Record_Size'))
+                # log.warn("TEST UNPACK: %s", Record_Size)
 
-                Offsets = struct.unpack('9I', match.group('Offsets'))
-                log.warn("TEST UNPACK: %s", Offsets)
+                # Offsets = struct.unpack('9I', match.group('Offsets'))
+                # log.warn("TEST UNPACK: %s", Offsets)
+                #
+                # for offset in Offsets:
+                #     log.warn("Offset: %s %s", hex(ord(line[offset])), hex(ord(line[offset+1])))
+
+
+            log.warn("FILE SIZE?: %s", sys.getsizeof(line))
+
 
             # if EMPTY_LINE_MATCHER.match(line):
             #     # ignore blank lines, do nothing

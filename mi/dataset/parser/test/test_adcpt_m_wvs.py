@@ -38,11 +38,13 @@ class AdcptMWVSParserUnitTestCase(ParserUnitTestCase):
             {DataSetDriverConfigKeys.PARTICLE_MODULE: 'mi.dataset.parser.adcpt_m_wvs',
              DataSetDriverConfigKeys.PARTICLE_CLASS: 'AdcptMWVSInstrumentDataParticle'},
             file_handle,
+            lambda state, ingested: None,
+            self.publish_callback,
             self.exception_callback)
         return parser
 
     def open_file(self, filename):
-        file = open(os.path.join(RESOURCE_PATH, filename), mode='r')
+        file = open(os.path.join(RESOURCE_PATH, filename), mode='rb')
         return file
 
     def setUp(self):
@@ -109,7 +111,7 @@ class AdcptMWVSParserUnitTestCase(ParserUnitTestCase):
         Verification is not done at this time, but will be done in the
         tests below. This is mainly for debugging the regexes.
         """
-        in_file = self.open_file('CE01ISSM-ADCPT_20140418_000_TS1404180021 - excerpt.WVS')
+        in_file = self.open_file('CE01ISSM-ADCPT_20140418_000_TS1404180021.WVS')
         parser = self.create_parser('AdcptMWVSInstrumentDataParticle', in_file)
 
         # In a single read, get all particles in this file.
