@@ -264,6 +264,10 @@ FCOEFF_ENCODING_RULES = [
     (AdcptMWVSParticleKey.PRESS_SPEC, 'B', int)
 ]
 
+fmt_sizes = {
+    'H': 2,
+    'B': 1
+}
 
 
 class DataParticleType(BaseEnum):
@@ -285,21 +289,44 @@ class AdcptMWVSInstrumentDataParticle(DataParticle):
         Build parsed values for Recovered Instrument Data Particle.
         """
 
+        final_result = []
+
         # Generate a particle by calling encode_value for each entry
         # in the Instrument Particle Mapping table,
         # where each entry is a tuple containing the particle field name, which is also
         # an index into the match groups (which is what has been stored in raw_data),
         # and a function to use for data conversion.
 
-        return [self._encode_value(name, self.raw_data[name], function)
-                for name, function in FCOEFF_ENCODING_RULES]
+        Header = namedtuple('Header', 'id1 id2 spare0 spare1 record_size spare2 spare3 spare4 num_data_types')
+        header_dict = Header._asdict(Header._make(struct.unpack_from('<4bI3bB', self.raw_data)))
+
+        # get offsets % header_dict['num_data_types']
+        offsets = struct.unpack_from('<%sI' % header_dict['num_data_types'], self.raw_data, 12)
+
+        log.warn("UNPACKED: %s\n%s", header_dict, offsets)
+
+        # unpack IDs from those offsets
+        for offset in offsets:
+            data_type_id = struct.unpack_from('h', self.raw_data, offset)
+            log.warn("TEST PRINT: %r", ''.join([hex(ch) for ch in data_type_id]))
 
 
-class AdcptMWVSRecoveredInstrumentDataParticle(AdcptMWVSInstrumentDataParticle):
-    """
-    Class for generating Offset Data Particles from Recovered data.
-    """
-    _data_particle_type = DataParticleType.SAMPLE
+        position = offsets[0] + 2   # +2 offset for the type
+        fixed_leader_dict2 = {}
+        for key, formatter, enc in FCOEFF_ENCODING_RULES:
+            value = struct.unpack_from('<%s' % formatter, self.raw_data, position)[0]
+            fixed_leader_dict2.update({key: value})
+            position += fmt_sizes[formatter]
+
+            final_result.append(self._encode_value(key, value, enc))
+            # put this into _build_parsed_values & call encode_value() directly to add to list!
+
+        log.warn("TEST2: %s", fixed_leader_dict2)
+
+        return final_result
+
+        # return [self._encode_value(name, self.raw_data[name], function)
+        #         for name, function in FCOEFF_ENCODING_RULES]
 
 
 class AdcptMWVSParser(BufferLoadingParser):
@@ -425,71 +452,45 @@ class AdcptMWVSParser(BufferLoadingParser):
         timestamp, chunk, start, end = self._chunker.get_next_data_with_index(clean=True)
         self.handle_non_data(non_data, non_end, start)
 
-        # # If not set from config & no InstrumentParameterException error from constructor
-        # if self.particle_classes is None:
-        #     self.particle_classes = (self._particle_class,)
 
         while chunk:
 
             # log.warn("TEST PRINT: %r", ''.join([hex(ord(ch)) for ch in chunk]))
+
             self.particle_count += 1
             log.warn("TEST INDICES: %s:%s #%s", start, end, self.particle_count)
 
-            Header = namedtuple('Header', 'id1 id2 spare0 spare1 record_size spare2 spare3 spare4 num_data_types')
-            header_dict = {}
-            header_dict = Header._asdict(Header._make(struct.unpack_from('<4bI3bB', chunk)))
-
-
-
-
-
-
-            # get offsets % header_dict['num_data_types']
-
-            offsets = struct.unpack_from('<%sI' % header_dict['num_data_types'], chunk, 12)
-
-            log.warn("UNPACKED: %s\n%s", header_dict, offsets)
-
-            # unpack IDs from those offsets
-
-            for offset in offsets:
-                data_type_id = struct.unpack_from('h', chunk, offset)
-                log.warn("TEST PRINT: %r", ''.join([hex(ch) for ch in data_type_id]))
-
-
-            # fmt = "".join([x[1] for x in FCOEFF_ENCODING_RULES]) # add the '<'?
-
-            # Fixed_Leader = namedtuple('Fixed_Leader', " ".join([x[0] for x in FCOEFF_ENCODING_RULES]))
-            # fixed_leader_dict = Fixed_Leader._asdict(Fixed_Leader._make(struct.unpack_from(
-            #     fmt, chunk, offsets[0]+2)))
+            # Header = namedtuple('Header', 'id1 id2 spare0 spare1 record_size spare2 spare3 spare4 num_data_types')
+            # header_dict = Header._asdict(Header._make(struct.unpack_from('<4bI3bB', chunk)))
             #
-            # log.warn("TEST1: %s: %s", fmt, fixed_leader_dict)
-
-            fmt_sizes = {
-                'H': 2,
-                'B': 1
-            }
-
-
-            position = offsets[0] + 2   # +2 offset for the type
-            fixed_leader_dict2 = {}
-            for key, formatter, enc in FCOEFF_ENCODING_RULES:
-                value = struct.unpack_from('<%s' % formatter, chunk, position)[0]
-                fixed_leader_dict2.update({key: value})
-                position += fmt_sizes[formatter]
-                # put this into _build_parsed_values & call encode_value() directly to add to list!
-
-            log.warn("TEST2: %s", fixed_leader_dict2)
-
-
-            # if sensor_match is not None:
-            #     particle = self._extract_sample(particle_class,
-            #                                     None,
-            #                                     sensor_match.groups(),
-            #                                     None)
-            #     if particle is not None:
-            #         result_particles.append((particle, None))
+            # # get offsets % header_dict['num_data_types']
+            # offsets = struct.unpack_from('<%sI' % header_dict['num_data_types'], chunk, 12)
             #
+            # log.warn("UNPACKED: %s\n%s", header_dict, offsets)
+            #
+            # # unpack IDs from those offsets
+            # for offset in offsets:
+            #     data_type_id = struct.unpack_from('h', chunk, offset)
+            #     log.warn("TEST PRINT: %r", ''.join([hex(ch) for ch in data_type_id]))
+            #
+            #
+            # position = offsets[0] + 2   # +2 offset for the type
+            # fixed_leader_dict2 = {}
+            # for key, formatter, enc in FCOEFF_ENCODING_RULES:
+            #     value = struct.unpack_from('<%s' % formatter, chunk, position)[0]
+            #     fixed_leader_dict2.update({key: value})
+            #     position += fmt_sizes[formatter]
+            #     # put this into _build_parsed_values & call encode_value() directly to add to list!
+            #
+            # log.warn("TEST2: %s", fixed_leader_dict2)
+
+            particle = self._extract_sample(self._particle_class,
+                                            None,
+                                            chunk,
+                                            None)
+            if particle is not None:
+                result_particles.append((particle, None))
+
             # # It's not a sensor data record, see if it's a metadata record.
             # else:
             #
