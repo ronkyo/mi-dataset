@@ -94,15 +94,17 @@ class AdcptMWVSParserUnitTestCase(ParserUnitTestCase):
         """
         This utility creates a yml file
         """
-        fid = open(os.path.join(RESOURCE_PATH, 'CE01ISSM-ADCPT_20140418_000_TS1404180021.WVS'), 'rb')
+        file_name = 'CE01ISSM-ADCPT_20140418_000_TS1404180021 - excerpt.WVS'
+
+        fid = open(os.path.join(RESOURCE_PATH, file_name), 'rb')
 
         self.stream_handle = fid
 
         self.parser = self.create_parser('AdcptMWVSInstrumentDataParticle', fid)
 
-        particles = self.parser.get_records(1)
+        particles = self.parser.get_records(1000)
 
-        self.particle_to_yml(particles, 'WVS1404180021.yml')
+        self.particle_to_yml(particles, 'CE01ISSM-ADCPT_20140418_000_TS1404180021 - excerpt.yml')
         fid.close()
 
     def test_parse_input(self):
@@ -111,7 +113,7 @@ class AdcptMWVSParserUnitTestCase(ParserUnitTestCase):
         Verification is not done at this time, but will be done in the
         tests below. This is mainly for debugging the regexes.
         """
-        in_file = self.open_file('CE01ISSM-ADCPT_20140418_000_TS1404180021.WVS')
+        in_file = self.open_file('CE01ISSM-ADCPT_20140418_000_TS1404180021 - excerpt.WVS')
         parser = self.create_parser('AdcptMWVSInstrumentDataParticle', in_file)
 
         # In a single read, get all particles in this file.
