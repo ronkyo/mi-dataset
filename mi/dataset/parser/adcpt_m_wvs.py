@@ -16,15 +16,6 @@ Mal-formed sensor data records produce no particles.
 
 The sensor data record has the following format:
 
-% Fourier Coefficients
-% <NumFields> Fields and <NumFreq> Frequencies
-% Frequency(Hz), Band width(Hz), Energy density(m^2/Hz), Direction (deg), A1, B1, A2, B2, Check Factor
-% Frequency Bands are <Fw_band> Hz wide(first frequency band is centered at <F0>)
-<frequency_band[0]> <bandwidth_band[0]> <energy_density_band[0]> <direction_band[0]> <a1_band[0]> <b1_band[0]> <a2_band[0]> <b2_band[0]> <check_factor_band[0]>
-<frequency_band[1]> <bandwidth_band[1]> <energy_density_band[1]> <direction_band[1]> <a1_band[1]> <b1_band[1]> <a2_band[1]> <b2_band[1]> <check_factor_band[1]>
-...
-<frequency_band[NumFreq]> <bandwidth_band[NumFreq]> <energy_density_band[NumFreq]> <direction_band[NumFreq]> <a1_band[NumFreq]> <b1_band[NumFreq]> <a2_band[NumFreq]> <b2_band[NumFreq]> <check_factor_band[NumFreq]>
-
 
 Release notes:
 
@@ -36,6 +27,7 @@ __license__ = 'Apache 2.0'
 
 
 import calendar
+import numpy
 import re
 import struct
 import sys
@@ -227,152 +219,184 @@ HEADER_MATCHER = re.compile(r"""(?x)
     \x7f\x7a(?P<Spare1> (.){2}) (?P<Record_Size> (.{4})) (?P<Spare2_4> (.){3}) (?P<NumDataTypes> (.))
     """ % common_matches, re.VERBOSE | re.DOTALL)
 
-
+"""
+Format	C Type	            Python type	        Standard size	Notes
+x	    pad byte	        no value
+c	    char	            string of length 1	1
+b	    signed char	        integer	            1	            (3)
+B	    unsigned char       integer	            1	            (3)
+?	    _Bool	            bool	            1	            (1)
+h	    short	            integer	            2	            (3)
+H	    unsigned short	    integer	            2	            (3)
+i	    int	                integer	            4	            (3)
+I	    unsigned int	    integer	            4	            (3)
+l	    long	            integer	            4	            (3)
+L	    unsigned long	    integer	            4	            (3)
+q	    long long	        integer	            8	            (2), (3)
+Q	    unsigned long long  integer	            8	            (2), (3)
+f	    float	            float	            4	            (4)
+d	    double	            float	            8	            (4)
+s	    char[]	            string
+p	    char[]	            string
+P	    void *	            integer	 	                        (5), (3)
+"""
 FIXED_LEADER_ENCODING_RULES = [
-    (AdcptMWVSParticleKey.FILE_MODE, 'B', int),
-    (AdcptMWVSParticleKey.REC_TIME_SERIES, 'B', int),
-    (AdcptMWVSParticleKey.REC_SPECTRA, 'B', int),
-    (AdcptMWVSParticleKey.REC_DIR_SPEC, 'B', int),
-    (AdcptMWVSParticleKey.SAMPLES_PER_BURST, 'H', int),
-    (AdcptMWVSParticleKey.TIME_BETWEEN_SAMPLES, 'H', int),
-    (AdcptMWVSParticleKey.TIME_BETWEEN_BURSTS_SEC, 'H', int),
-    (AdcptMWVSParticleKey.BIN_SIZE, 'H', int),
-    (AdcptMWVSParticleKey.BIN_1_MIDDLE, 'H', int),
-    (AdcptMWVSParticleKey.NUM_RANGE_BINS, 'B', int),
-    (AdcptMWVSParticleKey.NUM_VEL_BINS, 'B', int),
-    (AdcptMWVSParticleKey.NUM_INT_BINS, 'B', int),
-    (AdcptMWVSParticleKey.NUM_BEAMS, 'B', int),
-    (AdcptMWVSParticleKey.BEAM_CONF, 'B', int),
-    (AdcptMWVSParticleKey.WAVE_PARAM_SOURCE, 'B', int),
-    (AdcptMWVSParticleKey.NFFT_SAMPLES, 'H', int),
-    (AdcptMWVSParticleKey.NUM_DIRECTIONAL_SLICES, 'H', int),
-    (AdcptMWVSParticleKey.NUM_FREQ_BINS, 'H', int),
-    (AdcptMWVSParticleKey.WINDOW_TYPE, 'H', int),
-    (AdcptMWVSParticleKey.USE_PRESS_4_DEPTH, 'B', int),
-    (AdcptMWVSParticleKey.USE_STRACK_4_DEPTH, 'B', int),
-    (AdcptMWVSParticleKey.STRACK_SPEC, 'B', int),
-    (AdcptMWVSParticleKey.PRESS_SPEC, 'B', int),
+    (AdcptMWVSParticleKey.FILE_MODE, 'B'),
+    (AdcptMWVSParticleKey.REC_TIME_SERIES, 'B'),
+    (AdcptMWVSParticleKey.REC_SPECTRA, 'B'),
+    (AdcptMWVSParticleKey.REC_DIR_SPEC, 'B'),
+    (AdcptMWVSParticleKey.SAMPLES_PER_BURST, 'H'),
+    (AdcptMWVSParticleKey.TIME_BETWEEN_SAMPLES, 'H'),
+    (AdcptMWVSParticleKey.TIME_BETWEEN_BURSTS_SEC, 'H'),
+    (AdcptMWVSParticleKey.BIN_SIZE, 'H'),
+    (AdcptMWVSParticleKey.BIN_1_MIDDLE, 'H'),
+    (AdcptMWVSParticleKey.NUM_RANGE_BINS, 'B'),
+    (AdcptMWVSParticleKey.NUM_VEL_BINS, 'B'),
+    (AdcptMWVSParticleKey.NUM_INT_BINS, 'B'),
+    (AdcptMWVSParticleKey.NUM_BEAMS, 'B'),
+    (AdcptMWVSParticleKey.BEAM_CONF, 'B'),
+    (AdcptMWVSParticleKey.WAVE_PARAM_SOURCE, 'B'),
+    (AdcptMWVSParticleKey.NFFT_SAMPLES, 'H'),
+    (AdcptMWVSParticleKey.NUM_DIRECTIONAL_SLICES, 'H'),
+    (AdcptMWVSParticleKey.NUM_FREQ_BINS, 'H'),
+    (AdcptMWVSParticleKey.WINDOW_TYPE, 'H'),
+    (AdcptMWVSParticleKey.USE_PRESS_4_DEPTH, 'B'),
+    (AdcptMWVSParticleKey.USE_STRACK_4_DEPTH, 'B'),
+    (AdcptMWVSParticleKey.STRACK_SPEC, 'B'),
+    (AdcptMWVSParticleKey.PRESS_SPEC, 'B'),
 #SCREENING_TYPE_ENCODING_RULES
-    (AdcptMWVSParticleKey.VEL_MIN, 'h', int),
-    (AdcptMWVSParticleKey.VEL_MAX, 'h', int),
-    (AdcptMWVSParticleKey.VEL_STD, 'B', int),
-    (AdcptMWVSParticleKey.VEL_MAX_CHANGE, 'H', int),
-    (AdcptMWVSParticleKey.VEL_PCT_GD, 'B', int),
-    (AdcptMWVSParticleKey.SURF_MIN, 'i', int),
-    (AdcptMWVSParticleKey.SURF_MAX, 'i', int),
-    (AdcptMWVSParticleKey.SURF_STD, 'B', int),
-    (AdcptMWVSParticleKey.SURF_MAX_CHNG, 'i', int),
-    (AdcptMWVSParticleKey.SURF_PCT_GD, 'B', int),
-    (AdcptMWVSParticleKey.TBE_MAX_DEV, 'H', int),
-    (AdcptMWVSParticleKey.H_MAX_DEV, 'H', int),
-    (AdcptMWVSParticleKey.PR_MAX_DEV, 'B', int),
-    (AdcptMWVSParticleKey.NOM_DEPTH, 'I', int),
-    (AdcptMWVSParticleKey.CAL_PRESS, 'B', int),
-    (AdcptMWVSParticleKey.DEPTH_OFFSET, 'i', int),
-    (AdcptMWVSParticleKey.CURRENTS, 'B', int),
-    (AdcptMWVSParticleKey.SMALL_WAVE_FREQ, 'H', int),
-    (AdcptMWVSParticleKey.SMALL_WAVE_THRESH, 'h', int),
-    (AdcptMWVSParticleKey.TILTS, 'B', int),
-    (AdcptMWVSParticleKey.FIXED_PITCH, 'h', int),
-    (AdcptMWVSParticleKey.FIXED_ROLL, 'h', int),
-    (AdcptMWVSParticleKey.BOTTOM_SLOPE_X, 'h', int),
-    (AdcptMWVSParticleKey.BOTTOM_SLOPE_Y, 'h', int),
-    (AdcptMWVSParticleKey.DOWN, 'B', int),
-    (AdcptMWVSParticleKey.SPARE, '17b', int),
+    (AdcptMWVSParticleKey.VEL_MIN, 'h'),
+    (AdcptMWVSParticleKey.VEL_MAX, 'h'),
+    (AdcptMWVSParticleKey.VEL_STD, 'B'),
+    (AdcptMWVSParticleKey.VEL_MAX_CHANGE, 'H'),
+    (AdcptMWVSParticleKey.VEL_PCT_GD, 'B'),
+    (AdcptMWVSParticleKey.SURF_MIN, 'i'),
+    (AdcptMWVSParticleKey.SURF_MAX, 'i'),
+    (AdcptMWVSParticleKey.SURF_STD, 'B'),
+    (AdcptMWVSParticleKey.SURF_MAX_CHNG, 'i'),
+    (AdcptMWVSParticleKey.SURF_PCT_GD, 'B'),
+    (AdcptMWVSParticleKey.TBE_MAX_DEV, 'H'),
+    (AdcptMWVSParticleKey.H_MAX_DEV, 'H'),
+    (AdcptMWVSParticleKey.PR_MAX_DEV, 'B'),
+    (AdcptMWVSParticleKey.NOM_DEPTH, 'I'),
+    (AdcptMWVSParticleKey.CAL_PRESS, 'B'),
+    (AdcptMWVSParticleKey.DEPTH_OFFSET, 'i'),
+    (AdcptMWVSParticleKey.CURRENTS, 'B'),
+    (AdcptMWVSParticleKey.SMALL_WAVE_FREQ, 'H'),
+    (AdcptMWVSParticleKey.SMALL_WAVE_THRESH, 'h'),
+    (AdcptMWVSParticleKey.TILTS, 'B'),
+    (AdcptMWVSParticleKey.FIXED_PITCH, 'h'),
+    (AdcptMWVSParticleKey.FIXED_ROLL, 'h'),
+    (AdcptMWVSParticleKey.BOTTOM_SLOPE_X, 'h'),
+    (AdcptMWVSParticleKey.BOTTOM_SLOPE_Y, 'h'),
+    (AdcptMWVSParticleKey.DOWN, 'B'),
+    (AdcptMWVSParticleKey.SPARE, '17x'),   # 17b
 #END_SCREENING_TYPE_ENCODING_RULES
-    (AdcptMWVSParticleKey.TRANS_V2_SURF, 'B', int),
-    (AdcptMWVSParticleKey.SCALE_SPEC, 'B', int),
-    (AdcptMWVSParticleKey.SAMPLE_RATE, 'f', float),
-    (AdcptMWVSParticleKey.FREQ_THRESH, 'f', float),
-    (AdcptMWVSParticleKey.DUMMY_SURF, 'B', int),
-    (AdcptMWVSParticleKey.REMOVE_BIAS, 'B', int),
-    (AdcptMWVSParticleKey.DIR_CUTOFF, 'H', int),
-    (AdcptMWVSParticleKey.HEADING_VARIATION, 'h', int),
-    (AdcptMWVSParticleKey.SOFT_REV, 'B', int),
-    (AdcptMWVSParticleKey.CLIP_PWR_SPEC, 'B', int),
-    (AdcptMWVSParticleKey.DIR_P2, 'B', int),
-    (AdcptMWVSParticleKey.HORIZONTAL, 'B', int)
+    (AdcptMWVSParticleKey.TRANS_V2_SURF, 'B'),
+    (AdcptMWVSParticleKey.SCALE_SPEC, 'B'),
+    (AdcptMWVSParticleKey.SAMPLE_RATE, 'f'),
+    (AdcptMWVSParticleKey.FREQ_THRESH, 'f'),
+    (AdcptMWVSParticleKey.DUMMY_SURF, 'B'),
+    (AdcptMWVSParticleKey.REMOVE_BIAS, 'B'),
+    (AdcptMWVSParticleKey.DIR_CUTOFF, 'H'),
+    (AdcptMWVSParticleKey.HEADING_VARIATION, 'h'),
+    (AdcptMWVSParticleKey.SOFT_REV, 'B'),
+    (AdcptMWVSParticleKey.CLIP_PWR_SPEC, 'B'),
+    (AdcptMWVSParticleKey.DIR_P2, 'B'),
+    (AdcptMWVSParticleKey.HORIZONTAL, 'B')
 ]
 
 VARIABLE_LEADER_ENCODING_RULES = [
-    (AdcptMWVSParticleKey.START_TIME, '8B', lambda x: [int(y) for y in x]),
-    (AdcptMWVSParticleKey.STOP_TIME, '8B', lambda x: [int(y) for y in x]),
-    (AdcptMWVSParticleKey.FREQ_LO, 'H', int),
-    (AdcptMWVSParticleKey.AVERAGE_DEPTH, 'I', int),
-    (AdcptMWVSParticleKey.ALTITUDE, 'I', int),
-    (AdcptMWVSParticleKey.BIN_MAP, '128b', lambda x: [int(y) for y in x]),   #int??
-    (AdcptMWVSParticleKey.DISC_FLAG, 'B', int),
-    (AdcptMWVSParticleKey.PCT_GD_PRESS, 'B', int),
-    (AdcptMWVSParticleKey.AVG_SS, 'H', int),
-    (AdcptMWVSParticleKey.AVG_TEMP, 'H', int),
-    (AdcptMWVSParticleKey.PCT_GD_SURF, 'B', int),
-    (AdcptMWVSParticleKey.PCT_GD_VEL, 'B', int),
-    (AdcptMWVSParticleKey.HEADING_OFFSET, 'h', int),
-    (AdcptMWVSParticleKey.HS_STD, 'I', int),
-    (AdcptMWVSParticleKey.VS_STD, 'I', int),
-    (AdcptMWVSParticleKey.PS_STD, 'I', int),
-    (AdcptMWVSParticleKey.DS_FREQ_HI, 'I', int),
-    (AdcptMWVSParticleKey.VS_FREQ_HI, 'I', int),
-    (AdcptMWVSParticleKey.PS_FREQ_HI, 'I', int),
-    (AdcptMWVSParticleKey.SS_FREQ_HI, 'I', int),
-    (AdcptMWVSParticleKey.X_VEL, 'h', int),
-    (AdcptMWVSParticleKey.Y_VEL, 'h', int),
-    (AdcptMWVSParticleKey.AVG_PITCH, 'h', int),
-    (AdcptMWVSParticleKey.AVG_ROLL, 'h', int),
-    (AdcptMWVSParticleKey.AVG_HEADING, 'h', int),
-    (AdcptMWVSParticleKey.SAMPLES_COLLECTED, 'h', int),
-    (AdcptMWVSParticleKey.VSPEC_PCT_MEASURED, 'h', int)
+    (AdcptMWVSParticleKey.START_TIME, '8B'),
+    (AdcptMWVSParticleKey.STOP_TIME, '8B'),
+    (AdcptMWVSParticleKey.FREQ_LO, 'H'),
+    (AdcptMWVSParticleKey.AVERAGE_DEPTH, 'I'),
+    (AdcptMWVSParticleKey.ALTITUDE, 'I'),
+    (AdcptMWVSParticleKey.BIN_MAP, '128b'),
+    (AdcptMWVSParticleKey.DISC_FLAG, 'B'),
+    (AdcptMWVSParticleKey.PCT_GD_PRESS, 'B'),
+    (AdcptMWVSParticleKey.AVG_SS, 'H'),
+    (AdcptMWVSParticleKey.AVG_TEMP, 'H'),
+    (AdcptMWVSParticleKey.PCT_GD_SURF, 'B'),
+    (AdcptMWVSParticleKey.PCT_GD_VEL, 'B'),
+    (AdcptMWVSParticleKey.HEADING_OFFSET, 'h'),
+    (AdcptMWVSParticleKey.HS_STD, 'I'),
+    (AdcptMWVSParticleKey.VS_STD, 'I'),
+    (AdcptMWVSParticleKey.PS_STD, 'I'),
+    (AdcptMWVSParticleKey.DS_FREQ_HI, 'I'),
+    (AdcptMWVSParticleKey.VS_FREQ_HI, 'I'),
+    (AdcptMWVSParticleKey.PS_FREQ_HI, 'I'),
+    (AdcptMWVSParticleKey.SS_FREQ_HI, 'I'),
+    (AdcptMWVSParticleKey.X_VEL, 'h'),
+    (AdcptMWVSParticleKey.Y_VEL, 'h'),
+    (AdcptMWVSParticleKey.AVG_PITCH, 'h'),
+    (AdcptMWVSParticleKey.AVG_ROLL, 'h'),
+    (AdcptMWVSParticleKey.AVG_HEADING, 'h'),
+    (AdcptMWVSParticleKey.SAMPLES_COLLECTED, 'h'),
+    (AdcptMWVSParticleKey.VSPEC_PCT_MEASURED, 'h')
 ]
 
 VELOCITY_SPECTRUM_ENCODING_RULES = [
-    (AdcptMWVSParticleKey.VSPEC_NUM_FREQ, 'H', None, int),
-    (AdcptMWVSParticleKey.VSPEC_DAT, 'i', AdcptMWVSParticleKey.VSPEC_NUM_FREQ, lambda x: [int(y) for y in x])
+    (AdcptMWVSParticleKey.VSPEC_NUM_FREQ, 'H', None),
+    (AdcptMWVSParticleKey.VSPEC_DAT, 'i', AdcptMWVSParticleKey.VSPEC_NUM_FREQ)
 ]
 
 SURFACE_TRACK_SPECTRUM_ENCODING_RULES = [
-    (AdcptMWVSParticleKey.SSPEC_NUM_FREQ, 'H', None, int),
-    (AdcptMWVSParticleKey.SSPEC_DAT, 'i', AdcptMWVSParticleKey.SSPEC_NUM_FREQ, lambda x: [int(y) for y in x])
+    (AdcptMWVSParticleKey.SSPEC_NUM_FREQ, 'H', None),
+    (AdcptMWVSParticleKey.SSPEC_DAT, 'i', AdcptMWVSParticleKey.SSPEC_NUM_FREQ)
 ]
 
 PRESSURE_SPECTRUM_ENCODING_RULES = [
-    (AdcptMWVSParticleKey.PSPEC_NUM_FREQ, 'H', None, int),
-    (AdcptMWVSParticleKey.PSPEC_DAT, 'i', AdcptMWVSParticleKey.PSPEC_NUM_FREQ, lambda x: [int(y) for y in x])
+    (AdcptMWVSParticleKey.PSPEC_NUM_FREQ, 'H', None),
+    (AdcptMWVSParticleKey.PSPEC_DAT, 'i', AdcptMWVSParticleKey.PSPEC_NUM_FREQ)
 ]
 
 DIRECTIONAL_SPECTRUM_ENCODING_RULES = [
-    (AdcptMWVSParticleKey.DSPEC_NUM_FREQ, 'H', None, int),   # COUNT uint32[dspec_num_freq][dspec_num_dir]
-    (AdcptMWVSParticleKey.DSPEC_NUM_DIR, 'H', None, int),   # COUNT
-    (AdcptMWVSParticleKey.DSPEC_GOOD, 'H', None, int),
-    (AdcptMWVSParticleKey.DSPEC_DAT, 'I', [AdcptMWVSParticleKey.DSPEC_NUM_FREQ, AdcptMWVSParticleKey.DSPEC_NUM_DIR],
-     lambda x: [int(y) for y in x])
+    (AdcptMWVSParticleKey.DSPEC_NUM_FREQ, 'H', None),   # COUNT uint32[dspec_num_freq][dspec_num_dir]
+    (AdcptMWVSParticleKey.DSPEC_NUM_DIR, 'H', None),   # COUNT
+    (AdcptMWVSParticleKey.DSPEC_GOOD, 'H', None),
+    (AdcptMWVSParticleKey.DSPEC_DAT, 'I', [AdcptMWVSParticleKey.DSPEC_NUM_FREQ, AdcptMWVSParticleKey.DSPEC_NUM_DIR])
 ]
+
 
 WAVE_PARAMETER_ENCODING_RULES = [
-    (AdcptMWVSParticleKey.WAVE_HS1, 'h', int),
-    (AdcptMWVSParticleKey.WAVE_TP1, 'h', int),
-    (AdcptMWVSParticleKey.WAVE_DP1, 'h', int),
-    (AdcptMWVSParticleKey.SPARE, 'h', int),  # SPARE!
-    (AdcptMWVSParticleKey.WAVE_HS2, 'h', int),
-    (AdcptMWVSParticleKey.WAVE_TP2, 'h', int),
-    (AdcptMWVSParticleKey.WAVE_DP2, 'h', int),
-    (AdcptMWVSParticleKey.WAVE_DM, 'h', int)
+    (AdcptMWVSParticleKey.WAVE_HS1, 'h'),
+    (AdcptMWVSParticleKey.WAVE_TP1, 'h'),
+    (AdcptMWVSParticleKey.WAVE_DP1, 'h'),
+    (AdcptMWVSParticleKey.SPARE, 'x'),  # SPARE!   h
+    (AdcptMWVSParticleKey.WAVE_HS2, 'h'),
+    (AdcptMWVSParticleKey.WAVE_TP2, 'h'),
+    (AdcptMWVSParticleKey.WAVE_DP2, 'h'),
+    (AdcptMWVSParticleKey.WAVE_DM, 'h')
 ]
 
+# HPR_TIME_SERIES_ENCODING_RULES = [
+#     (AdcptMWVSParticleKey.HPR_NUM_SAMPLES, 'H', None),   # COUNT
+#     (AdcptMWVSParticleKey.BEAM_ANGLE, 'H', None),
+#     (AdcptMWVSParticleKey.SPARE, 'H', None),  # SPARE!
+#     (AdcptMWVSParticleKey.HEADING_TIME_SERIES, 'h', AdcptMWVSParticleKey.HPR_NUM_SAMPLES,
+#      lambda x: [int(y) for y in x]),   # HPR_NUM_SAMPLES
+#     (AdcptMWVSParticleKey.PITCH_TIME_SERIES, 'h', AdcptMWVSParticleKey.HPR_NUM_SAMPLES,
+#      lambda x: [int(y) for y in x]),   # HPR_NUM_SAMPLES
+#     (AdcptMWVSParticleKey.ROLL_TIME_SERIES, 'h', AdcptMWVSParticleKey.HPR_NUM_SAMPLES,
+#      lambda x: [int(y) for y in x])   # HPR_NUM_SAMPLES
+# ]
+
 HPR_TIME_SERIES_ENCODING_RULES = [
-    (AdcptMWVSParticleKey.HPR_NUM_SAMPLES, 'H', None, int),   # COUNT
-    (AdcptMWVSParticleKey.BEAM_ANGLE, 'H', None, int),
-    (AdcptMWVSParticleKey.SPARE, 'H', None, int),  # SPARE!
-    (AdcptMWVSParticleKey.HEADING_TIME_SERIES, 'h', AdcptMWVSParticleKey.HPR_NUM_SAMPLES,
-     lambda x: [int(y) for y in x]),   # HPR_NUM_SAMPLES
-    (AdcptMWVSParticleKey.PITCH_TIME_SERIES, 'h', AdcptMWVSParticleKey.HPR_NUM_SAMPLES,
-     lambda x: [int(y) for y in x]),   # HPR_NUM_SAMPLES
-    (AdcptMWVSParticleKey.ROLL_TIME_SERIES, 'h', AdcptMWVSParticleKey.HPR_NUM_SAMPLES,
-     lambda x: [int(y) for y in x])   # HPR_NUM_SAMPLES
+    (AdcptMWVSParticleKey.HPR_NUM_SAMPLES, 'H', None),   # COUNT
+    (AdcptMWVSParticleKey.BEAM_ANGLE, 'H', None),
+    (AdcptMWVSParticleKey.SPARE, 'H', None),  # SPARE!
+    ([AdcptMWVSParticleKey.HEADING_TIME_SERIES,
+      AdcptMWVSParticleKey.PITCH_TIME_SERIES,
+      AdcptMWVSParticleKey.ROLL_TIME_SERIES]
+     , 'h', AdcptMWVSParticleKey.HPR_NUM_SAMPLES)
 ]
 
 fmt_sizes = {
     '8B': 8,
     '17b': 17,
+    '17x': 17,
+    'x': 1,
     '128b': 128,
     'B': 1,
     'b': 1,
@@ -382,6 +406,29 @@ fmt_sizes = {
     'i': 4,
     'f': 4
 }
+
+fixed_leader_fmt = "".join([x[1] for x in FIXED_LEADER_ENCODING_RULES])
+fixed_leader_names = " ".join([x[0] if 'spare' not in x[0] else '' for x in FIXED_LEADER_ENCODING_RULES])
+
+
+class Fixed_Lead(namedtuple('Fixed_Leader', fixed_leader_names)):
+        __slots__ = ()
+
+        def _aslistdict(self):
+            return map(lambda name, value: {DataParticleKey.VALUE_ID: name,
+                                            DataParticleKey.VALUE: value},
+                       self._fields, self)
+
+fixed_leader_tup = namedtuple('Fixed_Leader', " ".join(
+    [x[0] if 'spare' not in x[0] else '' for x in FIXED_LEADER_ENCODING_RULES]))
+
+
+
+
+wave_param_fmt = "".join([x[1] for x in WAVE_PARAMETER_ENCODING_RULES])
+wave_param_tup = namedtuple('Fixed_Leader', " ".join(
+    [x[0] if 'spare' not in x[0] else '' for x in WAVE_PARAMETER_ENCODING_RULES]))
+
 
 
 class DataParticleType(BaseEnum):
@@ -421,15 +468,21 @@ class AdcptMWVSInstrumentDataParticle(DataParticle):
 
         log.trace("UNPACKED: %s\n%s", header_dict, offsets)
 
-        func_dict = {   # ID: [Rules, Func]
-            Fixed_Leader: [FIXED_LEADER_ENCODING_RULES, self._parse_stuff],
+        self.func_dict = {   # ID: [Rules, Func]
+            Fixed_Leader: [FIXED_LEADER_ENCODING_RULES, self._parse_stuff,
+                           fixed_leader_fmt,
+                           fixed_leader_tup], #fixed_leader_tup   #Fixed_Lead
+
             Variable_Leader: [VARIABLE_LEADER_ENCODING_RULES, self._parse_variable_leader],
-            Velocity_Time_Series: [FIXED_LEADER_ENCODING_RULES, self._parse_stuff],
+            Velocity_Time_Series: [FIXED_LEADER_ENCODING_RULES, self._do_nothing,  #self._parse_stuff
+                                   fixed_leader_fmt, fixed_leader_tup],  # unused?
             Velocity_Spectrum: [VELOCITY_SPECTRUM_ENCODING_RULES, self._parse_other_stuff],
             Surface_Track_Spectrum: [SURFACE_TRACK_SPECTRUM_ENCODING_RULES, self._parse_other_stuff],
             Pressure_Spectrum: [PRESSURE_SPECTRUM_ENCODING_RULES, self._parse_other_stuff],
             Directional_Spectrum: [DIRECTIONAL_SPECTRUM_ENCODING_RULES, self._parse_directional_spectrum],
-            Wave_Parameters: [WAVE_PARAMETER_ENCODING_RULES, self._parse_stuff],
+            Wave_Parameters: [WAVE_PARAMETER_ENCODING_RULES, self._do_nothing, #self._parse_stuff
+                           wave_param_fmt,
+                           wave_param_tup],
             Heading_Pitch_Roll_Time_Series: [HPR_TIME_SERIES_ENCODING_RULES, self._parse_hpr_time_series],
             Unknown: [None, self._do_nothing]
         }
@@ -446,7 +499,14 @@ class AdcptMWVSInstrumentDataParticle(DataParticle):
         for offset in offsets:
             data_type_id = struct.unpack_from('h', self.raw_data, offset)[0]
             # log.warn("TEST PRINT FUNC DICT: %s", func_dict[data_type_id])
-            func_dict[data_type_id][1](offset+2, func_dict[data_type_id][0])
+
+            if len(self.func_dict[data_type_id]) == 2:
+                self.func_dict[data_type_id][1](offset+2, self.func_dict[data_type_id][0])
+            else:
+                self.func_dict[data_type_id][1](offset+2,
+                                                self.func_dict[data_type_id][0],
+                                                self.func_dict[data_type_id][2],
+                                                self.func_dict[data_type_id][3])
 
         log.trace("FINAL RESULT: %s", self.final_result)
 
@@ -470,7 +530,7 @@ class AdcptMWVSInstrumentDataParticle(DataParticle):
     #     return {DataParticleKey.VALUE_ID: name,
     #             DataParticleKey.VALUE: encoded_val}
 
-    def _do_nothing(self, offset, rules):
+    def _do_nothing(self, offset, rules, *args):
         # log here?
         pass
 
@@ -479,17 +539,20 @@ class AdcptMWVSInstrumentDataParticle(DataParticle):
         temp_dict = {}
         position = offset
 
-        for key, formatter, num_data, enc in rules:
+        for key, formatter, num_data in rules:
             if 'spare' in key:
                 position += fmt_sizes[formatter]
             elif num_data and temp_dict[num_data[0]]:
                 count = int(temp_dict[num_data[0]]) * int(temp_dict[num_data[1]])
                 value = struct.unpack_from('<%s%s' % (count, formatter), self.raw_data, position)
                 # convert the array
+                new_np = numpy.array(value).reshape(
+                    (temp_dict[num_data[0]], temp_dict[num_data[1]])).tolist()
 
-                log.trace("DATA: %s:%s @ %s", key, value, position)
+                log.trace("DATA: %s:%s @ %s", key, new_np, position)
                 position += (fmt_sizes[formatter] * count)
-                self.final_result.append(self._encode_value(key, value, enc))
+                self.final_result.append({DataParticleKey.VALUE_ID: key,
+                                          DataParticleKey.VALUE: new_np})
 
             else:
                 value = struct.unpack_from('<%s' % formatter, self.raw_data, position)[0]
@@ -497,66 +560,69 @@ class AdcptMWVSInstrumentDataParticle(DataParticle):
                 log.trace("DATA: %s:%s @ %s", key, value, position)
                 position += fmt_sizes[formatter]
 
-                self.final_result.append(self._encode_value(key, value, enc))
-
-    """
-    HPR_TIME_SERIES_ENCODING_RULES = [
-        (AdcptMWVSParticleKey.HPR_NUM_SAMPLES, 'H', None, int),   # COUNT
-        (AdcptMWVSParticleKey.BEAM_ANGLE, 'H', None, int),
-        (AdcptMWVSParticleKey.SPARE, 'H', None, int),  # SPARE!
-        (AdcptMWVSParticleKey.HEADING_TIME_SERIES, 'h', AdcptMWVSParticleKey.HPR_NUM_SAMPLES, lambda x: [int(y) for y in x]),   # HPR_NUM_SAMPLES
-        (AdcptMWVSParticleKey.PITCH_TIME_SERIES, 'h', AdcptMWVSParticleKey.HPR_NUM_SAMPLES, lambda x: [int(y) for y in x]),   # HPR_NUM_SAMPLES
-        (AdcptMWVSParticleKey.ROLL_TIME_SERIES, 'h', AdcptMWVSParticleKey.HPR_NUM_SAMPLES, lambda x: [int(y) for y in x])   # HPR_NUM_SAMPLES
-    ]
-
-    1.  unpack 3*HPR_NUM_SAMPLES
-            a. go thru list & copy every 1,2,3rd value to corresponding array
-            b. np transform into 3 x HPR_NUM_SAMPLES
-
-
-    2. for each particle name
-        unpack every 1st, 2nd, 3rd value respectively
-
-    """
+                self.final_result.append({DataParticleKey.VALUE_ID: key,
+                                          DataParticleKey.VALUE: value})
 
     def _parse_hpr_time_series(self, offset, rules):
 
         position = offset
         temp_dict = {}
-        for key, formatter, num_data, enc in rules:
+        for key, formatter, num_data in rules:
             # if it's not None, maybe do a check that it exists in the enum too, and also check it's type int
             if 'spare' in key:
                 position += fmt_sizes[formatter]
             elif num_data and temp_dict[num_data]:    # keyError! check
 
-                # value = struct.unpack_from('<%s%s' % (temp_dict[num_data], formatter),
-                #                            self.raw_data, position)
-                # log.warn("TEST DATA: %s:%s @ %s", key, value, position)
-                # position += (fmt_sizes[formatter] * int(temp_dict[num_data]))
-                # self.final_result.append(self._encode_value(key, value, enc))
+                value = struct.unpack_from('<%s%s' % (3*temp_dict[num_data], formatter),
+                                           self.raw_data, position)
 
-                value_list = []
-                temp_pos = position
-                for i in xrange(temp_dict[num_data]):
-                    value = struct.unpack_from('<%s' % formatter, self.raw_data, position)[0]
-                    log.trace("DATA: %s:%s @ %s", key, value, position)
-                    temp_pos += (fmt_sizes[formatter] * 3)
-                    value_list.append(value)
-                self.final_result.append(self._encode_value(key, value_list, enc))
-                position += 1
+                new_np = numpy.array(value).reshape((temp_dict[num_data], 3)).transpose().tolist()
+
+                log.trace("TEST DATA: %s @ %s", new_np, position)
+                position += (fmt_sizes[formatter] * int(temp_dict[num_data]) * 3)
+                self.final_result.append({DataParticleKey.VALUE_ID: key[0],
+                                          DataParticleKey.VALUE: new_np[0]})
+                self.final_result.append({DataParticleKey.VALUE_ID: key[1],
+                                          DataParticleKey.VALUE: new_np[1]})
+                self.final_result.append({DataParticleKey.VALUE_ID: key[2],
+                                          DataParticleKey.VALUE: new_np[2]})
 
             else:
                 value = struct.unpack_from('<%s' % formatter, self.raw_data, position)[0]
                 temp_dict.update({key: value})
-                self.final_result.append(self._encode_value(key, value, enc))
+                # self.final_result.append(self._encode_value(key, value, enc))
+                self.final_result.append({DataParticleKey.VALUE_ID: key,
+                                          DataParticleKey.VALUE: value})
                 log.trace("DATA: %s:%s @ %s", key, value, position)
                 position += fmt_sizes[formatter]
 
-    def _parse_stuff(self, offset, rules):
+    def _parse_stuff(self, offset, rules, fmt, named_tup):
         # can use other code!?
         position = offset
 
-        for key, formatter, enc in rules:
+        # fmt = "".join([x[1] for x in rules])    # add the '<'?
+        # Fixed_Leader = namedtuple('Fixed_Leader', " ".join(
+        #     [x[0] if 'spare' not in x[0] else '' for x in rules]))
+        # fixed_leader_dict = Fixed_Leader._asdict(Fixed_Leader._make(struct.unpack_from(
+        #     fmt, self.raw_data, position)))
+
+
+        # fixed_leader_dict = named_tup._asdict(named_tup._make(struct.unpack_from(
+        #     fmt, self.raw_data, position)))
+        #
+        # for key, formatter in rules:   # DON'T NEED TO ENCODE!!!
+        #     if 'spare' not in key:
+        #         self.final_result.append({DataParticleKey.VALUE_ID: key,
+        #                                  DataParticleKey.VALUE: fixed_leader_dict[key]})
+
+
+        # tester = named_tup._aslistdict(
+        #     named_tup._make(struct.unpack_from(fmt, self.raw_data, position)))
+        # self.final_result.extend(tester)
+        #
+        # log.warn("TEST1: %s: %s", fmt, tester)
+
+        for key, formatter in rules:
             if 'spare' in key:
                 position += fmt_sizes[formatter]
             else:
@@ -565,12 +631,13 @@ class AdcptMWVSInstrumentDataParticle(DataParticle):
                     value = value[0]
                 log.trace("DATA: %s:%s @ %s", key, value, position)
                 position += fmt_sizes[formatter]
-                self.final_result.append(self._encode_value(key, value, enc))
+                self.final_result.append({DataParticleKey.VALUE_ID: key,
+                                          DataParticleKey.VALUE: value})
 
     def _parse_variable_leader(self, offset, rules):
         position = offset
 
-        for key, formatter, enc in rules:
+        for key, formatter in rules:
             value = struct.unpack_from('<%s' % formatter, self.raw_data, position)
             if len(value) == 1:
                 value = value[0]
@@ -583,13 +650,14 @@ class AdcptMWVSInstrumentDataParticle(DataParticle):
                 self.set_internal_timestamp(unix_time=elapsed_seconds)
             log.trace("DATA: %s:%s @ %s", key, value, position)
             position += fmt_sizes[formatter]
-            self.final_result.append(self._encode_value(key, value, enc))
+            self.final_result.append({DataParticleKey.VALUE_ID: key,
+                                          DataParticleKey.VALUE: value})
 
     def _parse_other_stuff(self, offset, rules):
 
         position = offset
         temp_dict = {}
-        for key, formatter, num_data, enc in rules:
+        for key, formatter, num_data in rules:
             # if it's not None, maybe do a check that it exists in the enum too, and also check it's type int
             if 'spare' in key:
                 position += fmt_sizes[formatter]
@@ -599,32 +667,27 @@ class AdcptMWVSInstrumentDataParticle(DataParticle):
                                            self.raw_data, position)
                 log.trace("TEST DATA: %s:%s @ %s", key, value, position)
                 position += (fmt_sizes[formatter] * int(temp_dict[num_data]))
-                self.final_result.append(self._encode_value(key, value, enc))
-
-                # value_list = []
-                # for i in xrange(temp_dict[num_data]):
-                #     value = struct.unpack_from('<%s' % formatter, self.raw_data, position)[0]
-                #     log.warn("DATA: %s:%s @ %s", key, value, position)
-                #     position += fmt_sizes[formatter]
-                #     value_list.append(value)
-                # self.final_result.append(self._encode_value(key, value_list, enc))
+                self.final_result.append({DataParticleKey.VALUE_ID: key,
+                                          DataParticleKey.VALUE: value})
 
             else:
                 value = struct.unpack_from('<%s' % formatter, self.raw_data, position)[0]
                 temp_dict.update({key: value})
-                self.final_result.append(self._encode_value(key, value, enc))
+                self.final_result.append({DataParticleKey.VALUE_ID: key,
+                                          DataParticleKey.VALUE: value})
                 log.trace("DATA: %s:%s @ %s", key, value, position)
                 position += fmt_sizes[formatter]
 
     # Can put the transpose/transforming numpy function in the "enc"?
-    def _parse_array(self, num_data, position, key, formatter, enc):
+    def _parse_array(self, num_data, position, key, formatter):
         if num_data and self.temp_dict[num_data]:    # keyError! check
 
             value = struct.unpack_from('<%s%s' % (self.temp_dict[num_data], formatter),
                                        self.raw_data, position)
             log.trace("TEST DATA: %s:%s @ %s", key, value, position)
             position += (fmt_sizes[formatter] * int(self.temp_dict[num_data]))
-            self.final_result.append(self._encode_value(key, value, enc))
+            self.final_result.append({DataParticleKey.VALUE_ID: key,
+                                          DataParticleKey.VALUE: value})
 
             # value_list = []
             # for i in xrange(self.temp_dict[num_data]):
@@ -632,7 +695,8 @@ class AdcptMWVSInstrumentDataParticle(DataParticle):
             #     log.warn("DATA: %s:%s @ %s", key, value, position)
             #     position += fmt_sizes[formatter]
             #     value_list.append(value)
-            # self.final_result.append(self._encode_value(key, value_list, enc))
+            # self.final_result.append({DataParticleKey.VALUE_ID: key,
+            #                               DataParticleKey.VALUE: value})
 
 
 class AdcptMWVSParser(BufferLoadingParser):
@@ -690,14 +754,15 @@ class AdcptMWVSParser(BufferLoadingParser):
             record_end = record_start + struct.unpack('I', first_match.group('Record_Size'))[0]
             num_data = struct.unpack('B', first_match.group('NumDataTypes'))[0]
 
+            # if not EOF, check that the next position contains the "starting id" thing
+
             # Get a whole record
             if len(input_buffer) >= record_end:
                 indices_list.append((record_start, record_end))
-                log.warn("FOUND RECORD %s:%s at %s with %s data types", record_start, record_end,
+                log.trace("FOUND RECORD %s:%s at %s with %s data types", record_start, record_end,
                          self._stream_handle.tell(), num_data)
 
             # Get the header, then the parts? Needs control of the reading...
-
 
 
         # #find all occurrences of the record header sentinel
@@ -775,15 +840,14 @@ class AdcptMWVSParser(BufferLoadingParser):
             # log.warn("TEST PRINT: %r", ''.join([hex(ord(ch)) for ch in chunk]))
 
             self.particle_count += 1
-            log.warn("TEST INDICES: %s:%s #%s %s", start, end, self.particle_count,
-                     self._particle_class._file_time)
+            log.trace("TEST INDICES: %s:%s #%s", start, end, self.particle_count)
 
             particle = self._extract_sample(self._particle_class,
                                             None,
                                             chunk,
                                             None)
 
-            log.warn('Parsed particle: %s' % particle.generate_dict())
+            log.trace('Parsed particle: %s' % particle.generate_dict())
 
             if particle is not None:
                 result_particles.append((particle, None))
