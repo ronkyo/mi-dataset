@@ -39,5 +39,7 @@ root:
 loggers:
   mi:
     level: INFO
+  mi.idk.result_set:
+    level: DEBUG
   ooi:
     level: INFO

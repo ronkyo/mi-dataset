@@ -8,9 +8,7 @@
 
 This file contains code for the adcpt_m_wvs parser and code to produce data particles
 
-Fourier Coefficients data files (FCoeff*.txt) are space-delimited ASCII (with leading spaces).
-FCoeff files contain leader rows containing English readable text.
-Subsequent rows in WVS contain float data.
+Fourier Coefficients data files (FCoeff*.WVS) are binary files
 The file contains data for a single burst/record of pings.
 Mal-formed sensor data records produce no particles.
 
@@ -30,16 +28,14 @@ import calendar
 import numpy
 import re
 import struct
+import ntplib
 import sys
 from itertools import chain
 from collections import namedtuple
 
 from mi.dataset.parser import utilities
-from mi.core.instrument.chunker import StringChunker
 from mi.core.exceptions import UnexpectedDataException, RecoverableSampleException
-from mi.dataset.dataset_parser import BufferLoadingParser, DataSetDriverConfigKeys
-
-from mi.dataset.dataset_parser import SimpleParser
+from mi.dataset.dataset_parser import BufferLoadingParser
 
 from mi.core.common import BaseEnum
 
@@ -48,12 +44,12 @@ from mi.core.instrument.data_particle import DataParticle, DataParticleKey
 from mi.core.log import get_logger
 log = get_logger()
 
-from mi.dataset.parser.common_regexes import \
-    UNSIGNED_INT_REGEX
+from mi.dataset.parser.common_regexes import UNSIGNED_INT_REGEX
 
 
 #Data Type IDs
-Header =                    '\x7f\x7a'
+# Header =                  '\x7f\x7a'
+Header =                    31359
 Fixed_Leader =              1
 Variable_Leader =           2
 Velocity_Time_Series =      3
@@ -195,17 +191,15 @@ common_matches = {
     'UINT': UNSIGNED_INT_REGEX
 }
 
-
 common_matches.update(AdcptMWVSParticleKey.__dict__)
-
-# 'CE01ISSM-ADCPT_20140418_000_TS1404180021.WVS'
-# 'CE01ISSM-ADCPT_20140418_000_TS1404180021 - excerpt.WVS'
 
 # WVS Filename timestamp format
 TIMESTAMP_FORMAT = "%y%m%d%H%M"
 
 # Regex to extract the timestamp from the WVS log file path
 # (path/to/CE01ISSM-ADCPT_YYYYMMDD_###_TS.WVS)
+# 'CE01ISSM-ADCPT_20140418_000_TS1404180021.WVS'
+# 'CE01ISSM-ADCPT_20140418_000_TS1404180021 - excerpt.WVS'
 FILE_NAME_MATCHER = re.compile(r"""(?x)
     .+CE01ISSM-ADCPT_
     %(UINT)s_(?P<%(SEQUENCE_NUMBER)s> %(UINT)s)_TS(?P<%(FILE_TIME)s> %(UINT)s).*\.WVS
@@ -220,25 +214,25 @@ HEADER_MATCHER = re.compile(r"""(?x)
     """ % common_matches, re.VERBOSE | re.DOTALL)
 
 """
-Format	C Type	            Python type	        Standard size	Notes
+Format	C Type	            Python type	        Standard size
 x	    pad byte	        no value
 c	    char	            string of length 1	1
-b	    signed char	        integer	            1	            (3)
-B	    unsigned char       integer	            1	            (3)
-?	    _Bool	            bool	            1	            (1)
-h	    short	            integer	            2	            (3)
-H	    unsigned short	    integer	            2	            (3)
-i	    int	                integer	            4	            (3)
-I	    unsigned int	    integer	            4	            (3)
-l	    long	            integer	            4	            (3)
-L	    unsigned long	    integer	            4	            (3)
-q	    long long	        integer	            8	            (2), (3)
-Q	    unsigned long long  integer	            8	            (2), (3)
-f	    float	            float	            4	            (4)
-d	    double	            float	            8	            (4)
+b	    signed char	        integer	            1
+B	    unsigned char       integer	            1
+?	    _Bool	            bool	            1
+h	    short	            integer	            2
+H	    unsigned short	    integer	            2
+i	    int	                integer	            4
+I	    unsigned int	    integer	            4
+l	    long	            integer	            4
+L	    unsigned long	    integer	            4
+q	    long long	        integer	            8
+Q	    unsigned long long  integer	            8
+f	    float	            float	            4
+d	    double	            float	            8
 s	    char[]	            string
 p	    char[]	            string
-P	    void *	            integer	 	                        (5), (3)
+P	    void *	            integer
 """
 FIXED_LEADER_ENCODING_RULES = [
     (AdcptMWVSParticleKey.FILE_MODE, 'B'),
@@ -352,10 +346,11 @@ PRESSURE_SPECTRUM_ENCODING_RULES = [
 ]
 
 DIRECTIONAL_SPECTRUM_ENCODING_RULES = [
-    (AdcptMWVSParticleKey.DSPEC_NUM_FREQ, 'H', None),   # COUNT uint32[dspec_num_freq][dspec_num_dir]
+    (AdcptMWVSParticleKey.DSPEC_NUM_FREQ, 'H', None),  # COUNT uint32[dspec_num_freq][dspec_num_dir]
     (AdcptMWVSParticleKey.DSPEC_NUM_DIR, 'H', None),   # COUNT
     (AdcptMWVSParticleKey.DSPEC_GOOD, 'H', None),
-    (AdcptMWVSParticleKey.DSPEC_DAT, 'I', [AdcptMWVSParticleKey.DSPEC_NUM_FREQ, AdcptMWVSParticleKey.DSPEC_NUM_DIR])
+    (AdcptMWVSParticleKey.DSPEC_DAT, 'I', [AdcptMWVSParticleKey.DSPEC_NUM_FREQ,
+                                           AdcptMWVSParticleKey.DSPEC_NUM_DIR])
 ]
 
 WAVE_PARAMETER_ENCODING_RULES = [
@@ -436,9 +431,9 @@ class AdcptMWVSInstrumentDataParticle(DataParticle):
             Fixed_Leader: [FIXED_LEADER_ENCODING_RULES, self._parse_values],
             Variable_Leader: [VARIABLE_LEADER_ENCODING_RULES, self._parse_variable_leader],
             Velocity_Time_Series: [FIXED_LEADER_ENCODING_RULES, self._parse_values],  # unused?
-            Velocity_Spectrum: [VELOCITY_SPECTRUM_ENCODING_RULES, self._parse_other_stuff],
-            Surface_Track_Spectrum: [SURFACE_TRACK_SPECTRUM_ENCODING_RULES, self._parse_other_stuff],
-            Pressure_Spectrum: [PRESSURE_SPECTRUM_ENCODING_RULES, self._parse_other_stuff],
+            Velocity_Spectrum: [VELOCITY_SPECTRUM_ENCODING_RULES, self._parse_values_with_array],
+            Surface_Track_Spectrum: [SURFACE_TRACK_SPECTRUM_ENCODING_RULES, self._parse_values_with_array],
+            Pressure_Spectrum: [PRESSURE_SPECTRUM_ENCODING_RULES, self._parse_values_with_array],
             Directional_Spectrum: [DIRECTIONAL_SPECTRUM_ENCODING_RULES, self._parse_directional_spectrum],
             Wave_Parameters: [WAVE_PARAMETER_ENCODING_RULES, self._parse_values],
             Heading_Pitch_Roll_Time_Series: [HPR_TIME_SERIES_ENCODING_RULES, self._parse_hpr_time_series],
@@ -448,10 +443,16 @@ class AdcptMWVSInstrumentDataParticle(DataParticle):
         if self._file_time:
             self.final_result.append(self._encode_value(
                 AdcptMWVSParticleKey.FILE_TIME, self._file_time, str))
+        else:
+            self.final_result.append({DataParticleKey.VALUE_ID: AdcptMWVSParticleKey.FILE_TIME,
+                                      DataParticleKey.VALUE: None})
 
         if self._sequence_number:
             self.final_result.append(self._encode_value(
                 AdcptMWVSParticleKey.SEQUENCE_NUMBER, self._sequence_number, int))
+        else:
+            self.final_result.append({DataParticleKey.VALUE_ID: AdcptMWVSParticleKey.SEQUENCE_NUMBER,
+                                      DataParticleKey.VALUE: None})
 
         # unpack IDs from those offsets     # KeyError log
         for offset in offsets:
@@ -502,9 +503,10 @@ class AdcptMWVSInstrumentDataParticle(DataParticle):
         position = offset
         temp_dict = {}
         for key, formatter, num_data in rules:
-            # if it's not None, maybe do a check that it exists in the enum too, and also check it's type int
             if 'spare' in key:
                 position += fmt_sizes[formatter]
+
+            # if it's not None, maybe do a check that it exists in the enum too, and also check it's type int
             elif num_data and temp_dict[num_data]:    # keyError! check
 
                 value = struct.unpack_from('<%s%s' % (3*temp_dict[num_data], formatter),
@@ -562,15 +564,16 @@ class AdcptMWVSInstrumentDataParticle(DataParticle):
             self.final_result.append({DataParticleKey.VALUE_ID: key,
                                       DataParticleKey.VALUE: value})
 
-    def _parse_other_stuff(self, offset, rules):
+    def _parse_values_with_array(self, offset, rules):
 
         position = offset
         temp_dict = {}
         for key, formatter, num_data in rules:
-            # if it's not None, maybe do a check that it exists in the enum too, and also check it's type int
             if 'spare' in key:
                 position += fmt_sizes[formatter]
-            elif num_data and temp_dict[num_data]:    # keyError! check
+
+            # if it's not None, maybe do a check that it exists in the enum too, and also check it's type int
+            elif num_data and temp_dict[num_data]:    # keyError! check, try catch for unpack errors!
 
                 value = list(struct.unpack_from('<%s%s' % (temp_dict[num_data], formatter),
                                            self.raw_data, position))
@@ -590,10 +593,7 @@ class AdcptMWVSInstrumentDataParticle(DataParticle):
 
 class AdcptMWVSParser(BufferLoadingParser):
     """
-    Parser for dcl data.
-    In addition to the standard constructor parameters,
-    this constructor takes additional parameters sensor_data_matcher
-    and metadata_matcher
+    Parser for WVS data.
     """
 
     particle_count = 0
@@ -618,66 +618,44 @@ class AdcptMWVSParser(BufferLoadingParser):
         """
         Sort through the input buffer looking for a data record.
         A data record is considered to be properly framed if there is a
-        sync word and the checksum matches.
+        sync word and the appropriate size.
         Arguments:
           input_buffer - the contents of the input stream
         Returns:
           A list of start,end tuples
         """
 
-        #log.debug("sieve called with buffer of length %d", len(input_buffer))
-
         indices_list = []  # initialize the return list to empty
-
-        # log.warn("TEST BUFF: %s", input_buffer)
 
         # File is being read 1024 bytes at a time
         # Match up to the "number of data types"
-        first_match = HEADER_MATCHER.search(input_buffer)
+        match = HEADER_MATCHER.search(input_buffer)
+        log.trace("SEARCHING %x", self._stream_handle.tell())
 
-        # NOTE: reassess this, take into account erroneous/missing data causing shifts
-
-        # wait till an entire header structure is found, including offsets
-        if first_match:
-            record_start = first_match.start()
-            record_end = record_start + struct.unpack('I', first_match.group('Record_Size'))[0]
-            num_data = struct.unpack('B', first_match.group('NumDataTypes'))[0]
+        if match:
+            record_start = match.start()
+            record_size = struct.unpack('I', match.group('Record_Size'))[0]
+            record_end = record_start + record_size
+            num_data = struct.unpack('B', match.group('NumDataTypes'))[0]
 
             # if not EOF, check that the next position contains the "starting id" thing
 
             # Get a whole record
             if len(input_buffer) >= record_end:
-                indices_list.append((record_start, record_end))
-                log.trace("FOUND RECORD %s:%s at %s with %s data types", record_start, record_end,
-                         self._stream_handle.tell(), num_data)
 
-            # Get the header, then the parts? Needs control of the reading...
+                # check if next byte has the sync word
+                if len(input_buffer) == record_size or \
+                   len(input_buffer) == (record_size + 2) and \
+                   Header == struct.unpack_from('<H', input_buffer, record_size)[0]:
 
-        # #find all occurrences of the record header sentinel
-        # for match in HEADER_MATCHER.finditer(input_buffer):
-        #
-        #     record_start = match.start()
-        #
-        #     Record_Size = struct.unpack('I', match.group('Record_Size'))
-        #
-        #
-        #     log.warn("sieve function found sentinel at byte  %d", record_start)
-        #
-        #     # num_bytes = struct.unpack("<H", input_buffer[record_start + 2: record_start + 4])[0]
-        #     # get the number of bytes in the record, does not include the 2 checksum bytes
-        #
-        #     record_end = record_start + Record_Size[0]
-        #
-        #     #log.debug("sieve function number of bytes= %d , record end is %d", num_bytes, record_end)
-        #
-        #     #if there is enough in the buffer check the record
-        #     # if record_end <= len(input_buffer):
-        #     #     #make sure the checksum bytes are in the buffer too
-        #     #
-        #     #
-        #     #     indices_list.append((record_start, record_end))
-        #     #
-        #     #     #log.debug("sieve function found record.  Start = %d End = %d", record_start, record_end)
+                    self.particle_count += 1
+                    indices_list.append((record_start, record_end))
+                    log.trace("FOUND RECORD #%s %s:%s ending at %x with %s data types",
+                              self.particle_count,
+                              record_start, record_end,
+                              self._stream_handle.tell(), num_data)
+            else:
+                self.get_block(record_size-len(input_buffer)+2)
 
         return indices_list
 
@@ -716,8 +694,8 @@ class AdcptMWVSParser(BufferLoadingParser):
             self._particle_class._file_time = match.group(2)
         else:
             self.recov_exception_callback(
-                'Unable to extract file time or sequence number from WVS input file name: %s ' % input_file_name)
-
+                'Unable to extract file time or sequence number from WVS input file name: %s '
+                % input_file_name)
 
         result_particles = []
         nd_timestamp, non_data, non_start, non_end = self._chunker.get_next_non_data_with_index(clean=False)
@@ -725,9 +703,6 @@ class AdcptMWVSParser(BufferLoadingParser):
         self.handle_non_data(non_data, non_end, start)
 
         while chunk:
-
-            self.particle_count += 1
-            log.trace("TEST INDICES: %s:%s #%s", start, end, self.particle_count)
 
             particle = self._extract_sample(self._particle_class,
                                             None,

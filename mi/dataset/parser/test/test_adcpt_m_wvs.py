@@ -94,7 +94,7 @@ class AdcptMWVSParserUnitTestCase(ParserUnitTestCase):
         """
         This utility creates a yml file
         """
-        file_name = 'CE01ISSM-ADCPT_20140418_000_TS1404180021 - excerpt.WVS'
+        file_name = 'CE01ISSM-ADCPT_20140418_000_TS1404180021.WVS'
 
         fid = open(os.path.join(RESOURCE_PATH, file_name), 'rb')
 
@@ -102,9 +102,9 @@ class AdcptMWVSParserUnitTestCase(ParserUnitTestCase):
 
         self.parser = self.create_parser('AdcptMWVSInstrumentDataParticle', fid)
 
-        particles = self.parser.get_records(1000)
+        particles = self.parser.get_records(5)
 
-        self.particle_to_yml(particles, 'CE01ISSM-ADCPT_20140418_000_TS1404180021 - excerpt.yml')
+        self.particle_to_yml(particles, 'CE01ISSM-ADCPT_20140418_000_TS1404180021.yml')
         fid.close()
 
     def test_parse_input(self):
@@ -113,15 +113,32 @@ class AdcptMWVSParserUnitTestCase(ParserUnitTestCase):
         Verification is not done at this time, but will be done in the
         tests below. This is mainly for debugging the regexes.
         """
-        in_file = self.open_file('CE01ISSM-ADCPT_20140418_000_TS1404180021 - excerpt.WVS')
+        in_file = self.open_file('CE01ISSM-ADCPT_20140418_000_TS1404180021.WVS')
         parser = self.create_parser('AdcptMWVSInstrumentDataParticle', in_file)
 
         # In a single read, get all particles in this file.
-        result = parser.get_records(100)
-        # self.assertEqual(len(result), 1)
+        result = parser.get_records(516) # 515??
+        self.assertEqual(len(result), 515)
 
         in_file.close()
         self.assertListEqual(self.exception_callback_value, [])
+
+    def test_recov1(self):
+        """
+        Read a file and pull out a data particle.
+        Verify that the results are those we expected.
+        """
+        in_file = self.open_file('CE01ISSM-ADCPT_20140418_000_TS1404180021 - excerpt.WVS')
+        parser = self.create_parser('AdcptMWVSInstrumentDataParticle', in_file)
+
+        # In a single read, get all particles for this file.
+        result = parser.get_records(1)
+
+        self.assertEqual(len(result), 1)
+        self.assert_particles(result, 'CE01ISSM-ADCPT_20140418_000_TS1404180021 - excerpt.yml', RESOURCE_PATH)
+
+        self.assertListEqual(self.exception_callback_value, [])
+        in_file.close()
 
     def test_recov(self):
         """
@@ -132,10 +149,10 @@ class AdcptMWVSParserUnitTestCase(ParserUnitTestCase):
         parser = self.create_parser('AdcptMWVSInstrumentDataParticle', in_file)
 
         # In a single read, get all particles for this file.
-        result = parser.get_records(1)
+        result = parser.get_records(5)
 
-        self.assertEqual(len(result), 1)
-        self.assert_particles(result, 'WVS1404180021.yml', RESOURCE_PATH)
+        self.assertEqual(len(result), 5)
+        self.assert_particles(result, 'CE01ISSM-ADCPT_20140418_000_TS1404180021.yml', RESOURCE_PATH)
 
         self.assertListEqual(self.exception_callback_value, [])
         in_file.close()
@@ -215,7 +232,7 @@ class AdcptMWVSParserUnitTestCase(ParserUnitTestCase):
         """
         Ensure that bad data is skipped when it exists.
         """
-        fid = open(os.path.join(RESOURCE_PATH, 'WVSNoTime.txt'), 'rb')
+        fid = open(os.path.join(RESOURCE_PATH, 'CE01ISSM-ADCPT_20140418_NoTime - excerpt.WVS.txt'), 'rb')
 
         parser = self.create_parser('AdcptMWVSInstrumentDataParticle', fid)
 
