@@ -35,11 +35,6 @@ import calendar
 import numpy
 import re
 import struct
-import sys
-from itertools import chain
-from collections import namedtuple
-
-from mi.dataset.parser import utilities
 from mi.core.exceptions import UnexpectedDataException, RecoverableSampleException
 from mi.dataset.dataset_parser import BufferLoadingParser
 
@@ -246,7 +241,6 @@ p	    char[]	            string
 P	    void *	            integer
 """
 
-
 def make_null_parameters(rules):
     """
     Get the parameter names from an encoding rules list and create a list with NULL parameters
@@ -356,32 +350,31 @@ VARIABLE_LEADER_ENCODING_RULES = [
 NULL_VARIABLE_LEADER = make_null_parameters(VARIABLE_LEADER_ENCODING_RULES)
 
 VELOCITY_SPECTRUM_ENCODING_RULES = [
-    (AdcptMWVSParticleKey.VSPEC_NUM_FREQ, 'H', None),
-    (AdcptMWVSParticleKey.VSPEC_DAT, 'i', AdcptMWVSParticleKey.VSPEC_NUM_FREQ)
+    (AdcptMWVSParticleKey.VSPEC_NUM_FREQ, 'H'),
+    (AdcptMWVSParticleKey.VSPEC_DAT, 'i')
 ]
 
 NULL_VELOCITY_SPECTRUM = make_null_parameters(VELOCITY_SPECTRUM_ENCODING_RULES)
 
 SURFACE_TRACK_SPECTRUM_ENCODING_RULES = [
-    (AdcptMWVSParticleKey.SSPEC_NUM_FREQ, 'H', None),
-    (AdcptMWVSParticleKey.SSPEC_DAT, 'i', AdcptMWVSParticleKey.SSPEC_NUM_FREQ)
+    (AdcptMWVSParticleKey.SSPEC_NUM_FREQ, 'H'),
+    (AdcptMWVSParticleKey.SSPEC_DAT, 'i')
 ]
 
 NULL_SURFACE_TRACK_SPECTRUM = make_null_parameters(SURFACE_TRACK_SPECTRUM_ENCODING_RULES)
 
 PRESSURE_SPECTRUM_ENCODING_RULES = [
-    (AdcptMWVSParticleKey.PSPEC_NUM_FREQ, 'H', None),
-    (AdcptMWVSParticleKey.PSPEC_DAT, 'i', AdcptMWVSParticleKey.PSPEC_NUM_FREQ)
+    (AdcptMWVSParticleKey.PSPEC_NUM_FREQ, 'H'),
+    (AdcptMWVSParticleKey.PSPEC_DAT, 'i')
 ]
 
 NULL_PRESSURE_SPECTRUM = make_null_parameters(PRESSURE_SPECTRUM_ENCODING_RULES)
 
 DIRECTIONAL_SPECTRUM_ENCODING_RULES = [
-    (AdcptMWVSParticleKey.DSPEC_NUM_FREQ, 'H', None),  # COUNT uint32[dspec_num_freq][dspec_num_dir]
-    (AdcptMWVSParticleKey.DSPEC_NUM_DIR, 'H', None),   # COUNT
-    (AdcptMWVSParticleKey.DSPEC_GOOD, 'H', None),
-    (AdcptMWVSParticleKey.DSPEC_DAT, 'I', [AdcptMWVSParticleKey.DSPEC_NUM_FREQ,
-                                           AdcptMWVSParticleKey.DSPEC_NUM_DIR])
+    (AdcptMWVSParticleKey.DSPEC_NUM_FREQ, 'H'),  # COUNT uint32[dspec_num_freq][dspec_num_dir]
+    (AdcptMWVSParticleKey.DSPEC_NUM_DIR, 'H'),   # COUNT
+    (AdcptMWVSParticleKey.DSPEC_GOOD, 'H'),
+    (AdcptMWVSParticleKey.DSPEC_DAT, 'I')
 ]
 
 NULL_DIRECTIONAL_SPECTRUM = make_null_parameters(DIRECTIONAL_SPECTRUM_ENCODING_RULES)
@@ -400,19 +393,19 @@ WAVE_PARAMETER_ENCODING_RULES = [
 NULL_WAVE_PARAMETER = make_null_parameters(WAVE_PARAMETER_ENCODING_RULES)
 
 HPR_TIME_SERIES_ENCODING_RULES = [
-    (AdcptMWVSParticleKey.HPR_NUM_SAMPLES, 'H', None),   # COUNT
-    (AdcptMWVSParticleKey.BEAM_ANGLE, 'H', None),
-    (AdcptMWVSParticleKey.SPARE, 'H', None),  # SPARE!
+    (AdcptMWVSParticleKey.HPR_NUM_SAMPLES, 'H'),   # COUNT
+    (AdcptMWVSParticleKey.BEAM_ANGLE, 'H'),
+    (AdcptMWVSParticleKey.SPARE, 'H'),  # SPARE!
     ([AdcptMWVSParticleKey.HEADING_TIME_SERIES,
       AdcptMWVSParticleKey.PITCH_TIME_SERIES,
       AdcptMWVSParticleKey.ROLL_TIME_SERIES]
-     , 'h', AdcptMWVSParticleKey.HPR_NUM_SAMPLES)
+     , 'h')
 ]
 
 NULL_HPR_TIME_SERIES = make_null_parameters(HPR_TIME_SERIES_ENCODING_RULES)
 
 # Conversion for unpack format to offset
-fmt_sizes = {
+FMT_SIZES = {
     '8B': 8,
     '17b': 17,
     '17x': 17,
@@ -431,6 +424,7 @@ HEADER_NUM_DATA_TYPES_OFFSET = 11
 HEADER_OFFSETS_OFFSET = 12
 ID_TYPE_SIZE = 2
 
+# Size and Indices used for unpacking Heading, Pitch, Role data type
 HPR_TIME_SERIES_ARRAY_SIZE = 3
 HEADING_TIME_SERIES_IDX = 0
 PITCH_TIME_SERIES_IDX = 1
@@ -513,7 +507,7 @@ class AdcptMWVSInstrumentDataParticle(DataParticle):
 
         # unpack Type IDs from the offsets
         for offset in offsets:
-            data_type_id = struct.unpack_from('h', self.raw_data, offset)[0]
+            data_type_id, = struct.unpack_from('h', self.raw_data, offset)
             # keep track of retrieved data types
             retrieved_data_types.add(data_type_id)
 
@@ -535,35 +529,35 @@ class AdcptMWVSInstrumentDataParticle(DataParticle):
         return self.final_result
 
     def _parse_directional_spectrum(self, offset, rules):
+        """
+        Assumes first value to unpack contains the size of the array in the second value to unpack
+        """
+        # Unpack the unpacking rules
+        (num_freq_name, num_dir_name, good_name, dat_name),\
+        (num_freq_fmt, num_dir_fmt, good_fmt, dat_fmt) = zip(*rules)
 
-        temp_dict = {}
-        position = offset
+        log.trace("ZIP:, %s %s %s %s",
+                  num_freq_name, num_freq_fmt, num_dir_name, num_dir_fmt)
 
-        for key, formatter, num_data_key in rules:
-            if 'spare' in key:
-                position += fmt_sizes[formatter]
-            elif num_data_key and all(data in temp_dict for data in num_data_key):
-                num_freq = temp_dict[num_data_key[0]]
-                num_dir = temp_dict[num_data_key[1]]
-                length = num_freq * num_dir
-                value = struct.unpack_from('<%s%s' % (length, formatter), self.raw_data, position)
+        # First unpack the array lengths and single length values
+        (num_freq_data, num_dir_data, dspec_good_data) = struct.unpack_from(
+            '<%s%s%s' % (num_freq_fmt, num_dir_fmt, good_fmt), self.raw_data, offset)
 
-                # convert to numpy array and reshape the data
-                np_array = numpy.array(value).reshape((num_freq, num_dir)).tolist()
+        # Then unpack the array using the retrieved lengths values
+        next_offset = offset + FMT_SIZES[num_freq_fmt] + FMT_SIZES[num_dir_fmt] + FMT_SIZES[good_fmt]
+        dspec_dat_list_data = struct.unpack_from(
+            '<%s%s' % (num_freq_data * num_dir_data, dat_fmt), self.raw_data, next_offset)
 
-                log.trace("DATA: %s:%s @ %s", key, np_array, position)
-                position += (fmt_sizes[formatter] * length)
-                self.final_result.append({DataParticleKey.VALUE_ID: key,
-                                          DataParticleKey.VALUE: np_array})
+        # convert to numpy array and reshape the data per IDD spec
+        transformed_dat_data = numpy.array(dspec_dat_list_data).reshape(
+            (num_freq_data, num_dir_data)).tolist()
 
-            else:
-                value = struct.unpack_from('<%s' % formatter, self.raw_data, position)[0]
-                temp_dict.update({key: value})
-                log.trace("DATA: %s:%s @ %s", key, value, position)
-                position += fmt_sizes[formatter]
-
-                self.final_result.append({DataParticleKey.VALUE_ID: key,
-                                          DataParticleKey.VALUE: value})
+        # Add to the collected parameter data
+        self.final_result.extend(
+            ({DataParticleKey.VALUE_ID: num_freq_name, DataParticleKey.VALUE: num_freq_data},
+             {DataParticleKey.VALUE_ID: num_dir_name, DataParticleKey.VALUE: num_dir_data},
+             {DataParticleKey.VALUE_ID: good_name, DataParticleKey.VALUE: dspec_good_data},
+             {DataParticleKey.VALUE_ID: dat_name, DataParticleKey.VALUE: transformed_dat_data}))
 
     def _parse_hpr_time_series(self, offset, rules):
 
@@ -571,7 +565,7 @@ class AdcptMWVSInstrumentDataParticle(DataParticle):
         temp_dict = {}
         for key, formatter, num_data_key in rules:
             if 'spare' in key:
-                position += fmt_sizes[formatter]
+                position += FMT_SIZES[formatter]
             elif num_data_key and num_data_key in temp_dict:
                 length = HPR_TIME_SERIES_ARRAY_SIZE * temp_dict[num_data_key]
                 value = struct.unpack_from('<%s%s' % (length, formatter), self.raw_data, position)
@@ -581,34 +575,87 @@ class AdcptMWVSInstrumentDataParticle(DataParticle):
                     (temp_dict[num_data_key], HPR_TIME_SERIES_ARRAY_SIZE)).transpose().tolist()
 
                 log.trace("TEST DATA: %s @ %s", np_array, position)
-                position += (fmt_sizes[formatter] * length)
-                self.final_result.append({DataParticleKey.VALUE_ID: key[HEADING_TIME_SERIES_IDX],
-                                          DataParticleKey.VALUE: np_array[HEADING_TIME_SERIES_IDX]})
-                self.final_result.append({DataParticleKey.VALUE_ID: key[PITCH_TIME_SERIES_IDX],
-                                          DataParticleKey.VALUE: np_array[PITCH_TIME_SERIES_IDX]})
-                self.final_result.append({DataParticleKey.VALUE_ID: key[ROLL_TIME_SERIES_IDX],
-                                          DataParticleKey.VALUE: np_array[ROLL_TIME_SERIES_IDX]})
+
+                self.final_result.extend(({DataParticleKey.VALUE_ID: key[HEADING_TIME_SERIES_IDX],
+                                           DataParticleKey.VALUE: np_array[HEADING_TIME_SERIES_IDX]},
+                                          {DataParticleKey.VALUE_ID: key[PITCH_TIME_SERIES_IDX],
+                                           DataParticleKey.VALUE: np_array[PITCH_TIME_SERIES_IDX]},
+                                          {DataParticleKey.VALUE_ID: key[ROLL_TIME_SERIES_IDX],
+                                           DataParticleKey.VALUE: np_array[ROLL_TIME_SERIES_IDX]}))
 
             else:
-                value = struct.unpack_from('<%s' % formatter, self.raw_data, position)[0]
+                value, = struct.unpack_from('<%s' % formatter, self.raw_data, position)
                 temp_dict.update({key: value})
                 self.final_result.append({DataParticleKey.VALUE_ID: key,
                                           DataParticleKey.VALUE: value})
                 log.trace("DATA: %s:%s @ %s", key, value, position)
-                position += fmt_sizes[formatter]
+                position += FMT_SIZES[formatter]
+
+    def _parse_hpr_time_series_special(self, key, formatter, num_data, position):
+
+        length = HPR_TIME_SERIES_ARRAY_SIZE * num_data
+        value = struct.unpack_from('<%s%s' % (length, formatter), self.raw_data, position)
+
+        # convert to numpy array and reshape the data to a 2d array
+        np_array = numpy.array(value).reshape(
+            (num_data, HPR_TIME_SERIES_ARRAY_SIZE)).transpose().tolist()
+
+        log.trace("DATA: %s @ %s", np_array, position)
+
+        self.final_result.extend(({DataParticleKey.VALUE_ID: key[HEADING_TIME_SERIES_IDX],
+                                   DataParticleKey.VALUE: np_array[HEADING_TIME_SERIES_IDX]},
+                                  {DataParticleKey.VALUE_ID: key[PITCH_TIME_SERIES_IDX],
+                                   DataParticleKey.VALUE: np_array[PITCH_TIME_SERIES_IDX]},
+                                  {DataParticleKey.VALUE_ID: key[ROLL_TIME_SERIES_IDX],
+                                   DataParticleKey.VALUE: np_array[ROLL_TIME_SERIES_IDX]}))
+
+    def _parse_hpr_time_series(self, offset, rules):
+        """
+        Assumes first value to unpack contains the size of the array in the second value to unpack
+        """
+        # Unpack the unpacking rules
+        (hpr_num_name, beam_angle_name, spare_name, hpr_time_names),\
+        (hpr_num_fmt, beam_angle_fmt, spare_fmt, hpr_time_fmt) = zip(*rules)
+
+        log.trace("ZIP:, %s %s %s %s",
+                  hpr_num_name, hpr_num_fmt, beam_angle_name, beam_angle_fmt)
+
+        # First unpack the array length and single length value, no need to unpack spare
+        (hpr_num_data, beam_angle_data) = struct.unpack_from(
+            '<%s%s' % (hpr_num_fmt, beam_angle_fmt), self.raw_data, offset)
+
+        # Then unpack the array using the retrieved lengths value
+        next_offset = offset + FMT_SIZES[hpr_num_fmt] + FMT_SIZES[beam_angle_fmt] + FMT_SIZES[spare_fmt]
+        hpr_time_list_data = struct.unpack_from(
+            '<%s%s' % (hpr_num_data * HPR_TIME_SERIES_ARRAY_SIZE, hpr_time_fmt), self.raw_data, next_offset)
+
+        # convert to numpy array and reshape the data to a 2d array per IDD spec
+        transformed_hpr_time_data = numpy.array(hpr_time_list_data).reshape(
+            (hpr_num_data, HPR_TIME_SERIES_ARRAY_SIZE)).transpose().tolist()
+
+        # Add to the collected parameter data
+        self.final_result.extend(
+            ({DataParticleKey.VALUE_ID: hpr_num_name, DataParticleKey.VALUE: hpr_num_data},
+             {DataParticleKey.VALUE_ID: beam_angle_name, DataParticleKey.VALUE: beam_angle_data},
+             {DataParticleKey.VALUE_ID: hpr_time_names[HEADING_TIME_SERIES_IDX],
+              DataParticleKey.VALUE: transformed_hpr_time_data[HEADING_TIME_SERIES_IDX]},
+             {DataParticleKey.VALUE_ID: hpr_time_names[PITCH_TIME_SERIES_IDX],
+              DataParticleKey.VALUE: transformed_hpr_time_data[PITCH_TIME_SERIES_IDX]},
+             {DataParticleKey.VALUE_ID: hpr_time_names[ROLL_TIME_SERIES_IDX],
+              DataParticleKey.VALUE: transformed_hpr_time_data[ROLL_TIME_SERIES_IDX]}))
 
     def _parse_values(self, offset, rules):
         position = offset
 
         for key, formatter in rules:
             if 'spare' in key:
-                position += fmt_sizes[formatter]
+                position += FMT_SIZES[formatter]
             else:
                 value = list(struct.unpack_from('<%s' % formatter, self.raw_data, position))
                 if len(value) == 1:
                     value = value[0]
                 log.trace("DATA: %s:%s @ %s", key, value, position)
-                position += fmt_sizes[formatter]
+                position += FMT_SIZES[formatter]
                 self.final_result.append({DataParticleKey.VALUE_ID: key,
                                           DataParticleKey.VALUE: value})
 
@@ -626,33 +673,31 @@ class AdcptMWVSInstrumentDataParticle(DataParticle):
                 elapsed_seconds = calendar.timegm(timestamp)
                 self.set_internal_timestamp(unix_time=elapsed_seconds)
             log.trace("DATA: %s:%s @ %s", key, value, position)
-            position += fmt_sizes[formatter]
+            position += FMT_SIZES[formatter]
             self.final_result.append({DataParticleKey.VALUE_ID: key,
                                       DataParticleKey.VALUE: value})
 
     def _parse_values_with_array(self, offset, rules):
+        """
+        Assumes first value to unpack contains the size of the array for the second value to unpack
+        """
+        # Unpack the unpacking rules
+        (param_size_name, param_list_name), (param_size_fmt, param_list_fmt) = zip(*rules)
 
-        position = offset
-        temp_dict = {}
-        for key, formatter, num_data_key in rules:
-            if 'spare' in key:
-                position += fmt_sizes[formatter]
+        log.trace("ZIP:, %s %s %s %s",
+                  param_size_name, param_size_fmt, param_list_name, param_list_fmt)
 
-            elif num_data_key and num_data_key in temp_dict:
+        # First unpack the array length value
+        num_data, = struct.unpack_from('<%s' % param_size_fmt, self.raw_data, offset)
 
-                value = list(struct.unpack_from('<%s%s' % (temp_dict[num_data_key], formatter),
-                                                self.raw_data, position))
-                log.trace("TEST DATA: %s:%s @ %s", key, value, position)
-                position += (fmt_sizes[formatter] * temp_dict[num_data_key])
-                self.final_result.append({DataParticleKey.VALUE_ID: key,
-                                          DataParticleKey.VALUE: value})
-            else:
-                value = struct.unpack_from('<%s' % formatter, self.raw_data, position)[0]
-                temp_dict.update({key: value})
-                self.final_result.append({DataParticleKey.VALUE_ID: key,
-                                          DataParticleKey.VALUE: value})
-                log.trace("DATA: %s:%s @ %s", key, value, position)
-                position += fmt_sizes[formatter]
+        # Then unpack the array using the retrieved length value, casting from a tuple to a list
+        param_list_data = list(struct.unpack_from('<%s%s' % (num_data, param_list_fmt),
+                                                  self.raw_data, offset + FMT_SIZES[param_size_fmt]))
+
+        # Add to the collected parameter data
+        self.final_result.extend(
+            ({DataParticleKey.VALUE_ID: param_size_name, DataParticleKey.VALUE: num_data},
+             {DataParticleKey.VALUE_ID: param_list_name, DataParticleKey.VALUE: param_list_data}))
 
 
 class AdcptMWVSParser(BufferLoadingParser):
@@ -706,9 +751,9 @@ class AdcptMWVSParser(BufferLoadingParser):
 
         if match:
             record_start = match.start()
-            record_size = struct.unpack('I', match.group('Record_Size'))[0]
+            record_size, = struct.unpack('I', match.group('Record_Size'))
             record_end = record_start + record_size
-            num_data = struct.unpack('B', match.group('NumDataTypes'))[0]
+            num_data, = struct.unpack('B', match.group('NumDataTypes'))
 
             # if not EOF, check that the next position contains the "starting id" thing
 
@@ -775,7 +820,8 @@ class AdcptMWVSParser(BufferLoadingParser):
 
         while chunk:
 
-            particle = self._extract_sample(self._particle_class, None, chunk, None)
+            particle = self._extract_sample(self._particle_class,
+                                            None, chunk, None)
 
             log.trace('Parsed particle: %s\n\n' % particle.generate_dict())
 
