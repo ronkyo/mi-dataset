@@ -20,8 +20,6 @@ The waves record file (*.WVS) is in binary (HID:7F7A) format.
 This format is similar to that of the binary PD0 recovered format.
 The data is divided into files of ~20MB size.
 
-Mal-formed sensor data records produce no particles.
-
 Release notes:
 
 Initial Release
@@ -34,8 +32,9 @@ __license__ = 'Apache 2.0'
 import calendar
 import numpy
 import re
+import os
 import struct
-from mi.core.exceptions import UnexpectedDataException, RecoverableSampleException
+from mi.core.exceptions import RecoverableSampleException, SampleEncodingException
 from mi.dataset.dataset_parser import BufferLoadingParser
 
 from mi.core.common import BaseEnum
@@ -68,7 +67,7 @@ Bottom_Velocity_Time_Series =       15
 Altitude_Time_Series =              16
 Unknown =                           17
 
-# The particle ID's that must be filled in a particle
+# The particle Data Type ID's that must be filled in a particle
 EXPECTED_PARTICLE_IDS_SET = frozenset(
     [Fixed_Leader,
      Variable_Leader,
@@ -219,27 +218,6 @@ HEADER_MATCHER = re.compile(r"""(?x)
     \x7f\x7a(?P<Spare1> (.){2}) (?P<Record_Size> (.{4})) (?P<Spare2_4> (.){3}) (?P<NumDataTypes> (.))
     """, re.VERBOSE | re.DOTALL)
 
-"""
-Format	C Type	            Python type	        Standard size
-x	    pad byte	        no value
-c	    char	            string of length 1	1
-b	    signed char	        integer	            1
-B	    unsigned char       integer	            1
-?	    _Bool	            bool	            1
-h	    short	            integer	            2
-H	    unsigned short	    integer	            2
-i	    int	                integer	            4
-I	    unsigned int	    integer	            4
-l	    long	            integer	            4
-L	    unsigned long	    integer	            4
-q	    long long	        integer	            8
-Q	    unsigned long long  integer	            8
-f	    float	            float	            4
-d	    double	            float	            8
-s	    char[]	            string
-p	    char[]	            string
-P	    void *	            integer
-"""
 
 def make_null_parameters(rules):
     """
@@ -249,7 +227,7 @@ def make_null_parameters(rules):
             for key in rules if 'spare' not in key]
 
 # ENCODING RULES = [parameter name, unpack format]
-FIXED_LEADER_ENCODING_RULES = [
+FIXED_LEADER_UNPACKING_RULES = [
     (AdcptMWVSParticleKey.FILE_MODE, 'B'),
     (AdcptMWVSParticleKey.REC_TIME_SERIES, 'B'),
     (AdcptMWVSParticleKey.REC_SPECTRA, 'B'),
@@ -273,7 +251,7 @@ FIXED_LEADER_ENCODING_RULES = [
     (AdcptMWVSParticleKey.USE_STRACK_4_DEPTH, 'B'),
     (AdcptMWVSParticleKey.STRACK_SPEC, 'B'),
     (AdcptMWVSParticleKey.PRESS_SPEC, 'B'),
-#SCREENING_TYPE_ENCODING_RULES
+#SCREENING_TYPE_UNPACKING_RULES
     (AdcptMWVSParticleKey.VEL_MIN, 'h'),
     (AdcptMWVSParticleKey.VEL_MAX, 'h'),
     (AdcptMWVSParticleKey.VEL_STD, 'B'),
@@ -300,7 +278,7 @@ FIXED_LEADER_ENCODING_RULES = [
     (AdcptMWVSParticleKey.BOTTOM_SLOPE_Y, 'h'),
     (AdcptMWVSParticleKey.DOWN, 'B'),
     (AdcptMWVSParticleKey.SPARE, '17x'),
-#END_SCREENING_TYPE_ENCODING_RULES
+#END_SCREENING_TYPE_UNPACKING_RULES
     (AdcptMWVSParticleKey.TRANS_V2_SURF, 'B'),
     (AdcptMWVSParticleKey.SCALE_SPEC, 'B'),
     (AdcptMWVSParticleKey.SAMPLE_RATE, 'f'),
@@ -315,9 +293,9 @@ FIXED_LEADER_ENCODING_RULES = [
     (AdcptMWVSParticleKey.HORIZONTAL, 'B')
 ]
 
-NULL_FIXED_LEADER = make_null_parameters(FIXED_LEADER_ENCODING_RULES)
+NULL_FIXED_LEADER = make_null_parameters(FIXED_LEADER_UNPACKING_RULES)
 
-VARIABLE_LEADER_ENCODING_RULES = [
+VARIABLE_LEADER_UNPACKING_RULES = [
     (AdcptMWVSParticleKey.START_TIME, '8B'),
     (AdcptMWVSParticleKey.STOP_TIME, '8B'),
     (AdcptMWVSParticleKey.FREQ_LO, 'H'),
@@ -347,64 +325,64 @@ VARIABLE_LEADER_ENCODING_RULES = [
     (AdcptMWVSParticleKey.VSPEC_PCT_MEASURED, 'h')
 ]
 
-NULL_VARIABLE_LEADER = make_null_parameters(VARIABLE_LEADER_ENCODING_RULES)
+NULL_VARIABLE_LEADER = make_null_parameters(VARIABLE_LEADER_UNPACKING_RULES)
 
-VELOCITY_SPECTRUM_ENCODING_RULES = [
+VELOCITY_SPECTRUM_UNPACKING_RULES = [
     (AdcptMWVSParticleKey.VSPEC_NUM_FREQ, 'H'),
     (AdcptMWVSParticleKey.VSPEC_DAT, 'i')
 ]
 
-NULL_VELOCITY_SPECTRUM = make_null_parameters(VELOCITY_SPECTRUM_ENCODING_RULES)
+NULL_VELOCITY_SPECTRUM = make_null_parameters(VELOCITY_SPECTRUM_UNPACKING_RULES)
 
-SURFACE_TRACK_SPECTRUM_ENCODING_RULES = [
+SURFACE_TRACK_SPECTRUM_UNPACKING_RULES = [
     (AdcptMWVSParticleKey.SSPEC_NUM_FREQ, 'H'),
     (AdcptMWVSParticleKey.SSPEC_DAT, 'i')
 ]
 
-NULL_SURFACE_TRACK_SPECTRUM = make_null_parameters(SURFACE_TRACK_SPECTRUM_ENCODING_RULES)
+NULL_SURFACE_TRACK_SPECTRUM = make_null_parameters(SURFACE_TRACK_SPECTRUM_UNPACKING_RULES)
 
-PRESSURE_SPECTRUM_ENCODING_RULES = [
+PRESSURE_SPECTRUM_UNPACKING_RULES = [
     (AdcptMWVSParticleKey.PSPEC_NUM_FREQ, 'H'),
     (AdcptMWVSParticleKey.PSPEC_DAT, 'i')
 ]
 
-NULL_PRESSURE_SPECTRUM = make_null_parameters(PRESSURE_SPECTRUM_ENCODING_RULES)
+NULL_PRESSURE_SPECTRUM = make_null_parameters(PRESSURE_SPECTRUM_UNPACKING_RULES)
 
-DIRECTIONAL_SPECTRUM_ENCODING_RULES = [
+DIRECTIONAL_SPECTRUM_UNPACKING_RULES = [
     (AdcptMWVSParticleKey.DSPEC_NUM_FREQ, 'H'),  # COUNT uint32[dspec_num_freq][dspec_num_dir]
     (AdcptMWVSParticleKey.DSPEC_NUM_DIR, 'H'),   # COUNT
     (AdcptMWVSParticleKey.DSPEC_GOOD, 'H'),
     (AdcptMWVSParticleKey.DSPEC_DAT, 'I')
 ]
 
-NULL_DIRECTIONAL_SPECTRUM = make_null_parameters(DIRECTIONAL_SPECTRUM_ENCODING_RULES)
+NULL_DIRECTIONAL_SPECTRUM = make_null_parameters(DIRECTIONAL_SPECTRUM_UNPACKING_RULES)
 
-WAVE_PARAMETER_ENCODING_RULES = [
+WAVE_PARAMETER_UNPACKING_RULES = [
     (AdcptMWVSParticleKey.WAVE_HS1, 'h'),
     (AdcptMWVSParticleKey.WAVE_TP1, 'h'),
     (AdcptMWVSParticleKey.WAVE_DP1, 'h'),
-    (AdcptMWVSParticleKey.SPARE, 'x'),  # SPARE!
+    (AdcptMWVSParticleKey.SPARE, 'x'),
     (AdcptMWVSParticleKey.WAVE_HS2, 'h'),
     (AdcptMWVSParticleKey.WAVE_TP2, 'h'),
     (AdcptMWVSParticleKey.WAVE_DP2, 'h'),
     (AdcptMWVSParticleKey.WAVE_DM, 'h')
 ]
 
-NULL_WAVE_PARAMETER = make_null_parameters(WAVE_PARAMETER_ENCODING_RULES)
+NULL_WAVE_PARAMETER = make_null_parameters(WAVE_PARAMETER_UNPACKING_RULES)
 
-HPR_TIME_SERIES_ENCODING_RULES = [
+HPR_TIME_SERIES_UNPACKING_RULES = [
     (AdcptMWVSParticleKey.HPR_NUM_SAMPLES, 'H'),   # COUNT
     (AdcptMWVSParticleKey.BEAM_ANGLE, 'H'),
-    (AdcptMWVSParticleKey.SPARE, 'H'),  # SPARE!
+    (AdcptMWVSParticleKey.SPARE, 'H'),
     ([AdcptMWVSParticleKey.HEADING_TIME_SERIES,
       AdcptMWVSParticleKey.PITCH_TIME_SERIES,
       AdcptMWVSParticleKey.ROLL_TIME_SERIES]
      , 'h')
 ]
 
-NULL_HPR_TIME_SERIES = make_null_parameters(HPR_TIME_SERIES_ENCODING_RULES)
+NULL_HPR_TIME_SERIES = make_null_parameters(HPR_TIME_SERIES_UNPACKING_RULES)
 
-# Conversion for unpack format to offset
+# Conversion for unpack format to offset position
 FMT_SIZES = {
     '8B': 8,
     '17b': 17,
@@ -420,6 +398,7 @@ FMT_SIZES = {
     'f': 4
 }
 
+# Offsets for reading a record and its header
 HEADER_NUM_DATA_TYPES_OFFSET = 11
 HEADER_OFFSETS_OFFSET = 12
 ID_TYPE_SIZE = 2
@@ -431,7 +410,7 @@ PITCH_TIME_SERIES_IDX = 1
 ROLL_TIME_SERIES_IDX = 2
 
 # Indices into an encoding rules list
-ENCODE_RULES = 0
+UNPACK_RULES = 0
 ENCODE_FUNC = 1
 ENCODE_NULL = 2
 
@@ -449,32 +428,33 @@ class AdcptMWVSInstrumentDataParticle(DataParticle):
     """
 
     _data_particle_type = DataParticleType.SAMPLE
-    _file_time = None
-    _sequence_number = None
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, raw_data, sequence_number, file_time, **kwargs):
 
-        # Data Type ID: [Encoding Rules, Encoding Function, NULL Filler]
+        self._sequence_number = sequence_number
+        self._file_time = file_time
+
+        # Data Type ID: [Unpacking Rules, Encoding Function, NULL Filler]
         self.encoding_func_dict = {
-            Fixed_Leader: [FIXED_LEADER_ENCODING_RULES,
+            Fixed_Leader: [FIXED_LEADER_UNPACKING_RULES,
                            self._parse_values, NULL_FIXED_LEADER],
-            Variable_Leader: [VARIABLE_LEADER_ENCODING_RULES,
-                              self._parse_variable_leader, NULL_VARIABLE_LEADER],
-            Velocity_Spectrum: [VELOCITY_SPECTRUM_ENCODING_RULES,
+            Variable_Leader: [VARIABLE_LEADER_UNPACKING_RULES,
+                              self._parse_values, NULL_VARIABLE_LEADER],
+            Velocity_Spectrum: [VELOCITY_SPECTRUM_UNPACKING_RULES,
                                 self._parse_values_with_array, NULL_VELOCITY_SPECTRUM],
-            Surface_Track_Spectrum: [SURFACE_TRACK_SPECTRUM_ENCODING_RULES,
+            Surface_Track_Spectrum: [SURFACE_TRACK_SPECTRUM_UNPACKING_RULES,
                                      self._parse_values_with_array, NULL_SURFACE_TRACK_SPECTRUM],
-            Pressure_Spectrum: [PRESSURE_SPECTRUM_ENCODING_RULES,
+            Pressure_Spectrum: [PRESSURE_SPECTRUM_UNPACKING_RULES,
                                 self._parse_values_with_array, NULL_PRESSURE_SPECTRUM],
-            Directional_Spectrum: [DIRECTIONAL_SPECTRUM_ENCODING_RULES,
+            Directional_Spectrum: [DIRECTIONAL_SPECTRUM_UNPACKING_RULES,
                                    self._parse_directional_spectrum, NULL_DIRECTIONAL_SPECTRUM],
-            Wave_Parameters: [WAVE_PARAMETER_ENCODING_RULES,
+            Wave_Parameters: [WAVE_PARAMETER_UNPACKING_RULES,
                               self._parse_values, NULL_WAVE_PARAMETER],
-            Heading_Pitch_Roll_Time_Series: [HPR_TIME_SERIES_ENCODING_RULES,
+            Heading_Pitch_Roll_Time_Series: [HPR_TIME_SERIES_UNPACKING_RULES,
                                              self._parse_hpr_time_series, NULL_HPR_TIME_SERIES]
         }
 
-        super(AdcptMWVSInstrumentDataParticle, self).__init__(*args, **kwargs)
+        super(AdcptMWVSInstrumentDataParticle, self).__init__(raw_data, **kwargs)
 
     def _build_parsed_values(self):
         """
@@ -482,9 +462,9 @@ class AdcptMWVSInstrumentDataParticle(DataParticle):
         """
 
         self.final_result = []
-        retrieved_data_types = set()    # keeps track of data type ID's unpacked from record
+        retrieved_data_types = set()    # keep track of data type ID's unpacked from record
 
-        # get the file time from the file name
+        # Get the file time from the file name
         if self._file_time:
             self.final_result.append(self._encode_value(
                 AdcptMWVSParticleKey.FILE_TIME, self._file_time, str))
@@ -492,7 +472,7 @@ class AdcptMWVSInstrumentDataParticle(DataParticle):
             self.final_result.append({DataParticleKey.VALUE_ID: AdcptMWVSParticleKey.FILE_TIME,
                                       DataParticleKey.VALUE: None})
 
-        # get the sequence number from the file name
+        # Get the sequence number from the file name
         if self._sequence_number:
             self.final_result.append(self._encode_value(
                 AdcptMWVSParticleKey.SEQUENCE_NUMBER, self._sequence_number, int))
@@ -500,21 +480,21 @@ class AdcptMWVSInstrumentDataParticle(DataParticle):
             self.final_result.append({DataParticleKey.VALUE_ID: AdcptMWVSParticleKey.SEQUENCE_NUMBER,
                                       DataParticleKey.VALUE: None})
 
-        # get the number of data types from the Header
+        # Get the number of data types from the Header
         num_data_types = struct.unpack_from('<B', self.raw_data, HEADER_NUM_DATA_TYPES_OFFSET)
-        # get the list of offsets from the Header
+        # Get the list of offsets from the Header
         offsets = struct.unpack_from('<%sI' % num_data_types, self.raw_data, HEADER_OFFSETS_OFFSET)
 
-        # unpack Type IDs from the offsets
+        # Unpack Type IDs from the offsets
         for offset in offsets:
-            data_type_id, = struct.unpack_from('h', self.raw_data, offset)
+            data_type_id, = struct.unpack_from('<h', self.raw_data, offset)
             # keep track of retrieved data types
             retrieved_data_types.add(data_type_id)
 
-            # feed the data through the corresponding encoding function and encoding rules
+            # Feed the data through the corresponding encoding function and unpacking rules
             try:
                 self.encoding_func_dict[data_type_id][ENCODE_FUNC](
-                    offset+ID_TYPE_SIZE, self.encoding_func_dict[data_type_id][ENCODE_RULES])
+                    offset + ID_TYPE_SIZE, self.encoding_func_dict[data_type_id][UNPACK_RULES])
             except KeyError:
                 log.debug("Skipping unsupported data type ID: %s at offset: %s",
                           data_type_id, offset)
@@ -530,14 +510,11 @@ class AdcptMWVSInstrumentDataParticle(DataParticle):
 
     def _parse_directional_spectrum(self, offset, rules):
         """
-        Assumes first value to unpack contains the size of the array in the second value to unpack
+        Convert the binary data into particle data for the Directional Spectrum Data Type
         """
         # Unpack the unpacking rules
         (num_freq_name, num_dir_name, good_name, dat_name),\
         (num_freq_fmt, num_dir_fmt, good_fmt, dat_fmt) = zip(*rules)
-
-        log.trace("ZIP:, %s %s %s %s",
-                  num_freq_name, num_freq_fmt, num_dir_name, num_dir_fmt)
 
         # First unpack the array lengths and single length values
         (num_freq_data, num_dir_data, dspec_good_data) = struct.unpack_from(
@@ -560,65 +537,12 @@ class AdcptMWVSInstrumentDataParticle(DataParticle):
              {DataParticleKey.VALUE_ID: dat_name, DataParticleKey.VALUE: transformed_dat_data}))
 
     def _parse_hpr_time_series(self, offset, rules):
-
-        position = offset
-        temp_dict = {}
-        for key, formatter, num_data_key in rules:
-            if 'spare' in key:
-                position += FMT_SIZES[formatter]
-            elif num_data_key and num_data_key in temp_dict:
-                length = HPR_TIME_SERIES_ARRAY_SIZE * temp_dict[num_data_key]
-                value = struct.unpack_from('<%s%s' % (length, formatter), self.raw_data, position)
-
-                # convert to numpy array and reshape the data to a 2d array
-                np_array = numpy.array(value).reshape(
-                    (temp_dict[num_data_key], HPR_TIME_SERIES_ARRAY_SIZE)).transpose().tolist()
-
-                log.trace("TEST DATA: %s @ %s", np_array, position)
-
-                self.final_result.extend(({DataParticleKey.VALUE_ID: key[HEADING_TIME_SERIES_IDX],
-                                           DataParticleKey.VALUE: np_array[HEADING_TIME_SERIES_IDX]},
-                                          {DataParticleKey.VALUE_ID: key[PITCH_TIME_SERIES_IDX],
-                                           DataParticleKey.VALUE: np_array[PITCH_TIME_SERIES_IDX]},
-                                          {DataParticleKey.VALUE_ID: key[ROLL_TIME_SERIES_IDX],
-                                           DataParticleKey.VALUE: np_array[ROLL_TIME_SERIES_IDX]}))
-
-            else:
-                value, = struct.unpack_from('<%s' % formatter, self.raw_data, position)
-                temp_dict.update({key: value})
-                self.final_result.append({DataParticleKey.VALUE_ID: key,
-                                          DataParticleKey.VALUE: value})
-                log.trace("DATA: %s:%s @ %s", key, value, position)
-                position += FMT_SIZES[formatter]
-
-    def _parse_hpr_time_series_special(self, key, formatter, num_data, position):
-
-        length = HPR_TIME_SERIES_ARRAY_SIZE * num_data
-        value = struct.unpack_from('<%s%s' % (length, formatter), self.raw_data, position)
-
-        # convert to numpy array and reshape the data to a 2d array
-        np_array = numpy.array(value).reshape(
-            (num_data, HPR_TIME_SERIES_ARRAY_SIZE)).transpose().tolist()
-
-        log.trace("DATA: %s @ %s", np_array, position)
-
-        self.final_result.extend(({DataParticleKey.VALUE_ID: key[HEADING_TIME_SERIES_IDX],
-                                   DataParticleKey.VALUE: np_array[HEADING_TIME_SERIES_IDX]},
-                                  {DataParticleKey.VALUE_ID: key[PITCH_TIME_SERIES_IDX],
-                                   DataParticleKey.VALUE: np_array[PITCH_TIME_SERIES_IDX]},
-                                  {DataParticleKey.VALUE_ID: key[ROLL_TIME_SERIES_IDX],
-                                   DataParticleKey.VALUE: np_array[ROLL_TIME_SERIES_IDX]}))
-
-    def _parse_hpr_time_series(self, offset, rules):
         """
-        Assumes first value to unpack contains the size of the array in the second value to unpack
+        Convert the binary data into particle data for the Heading, Pitch, Time Series Data Type
         """
         # Unpack the unpacking rules
         (hpr_num_name, beam_angle_name, spare_name, hpr_time_names),\
         (hpr_num_fmt, beam_angle_fmt, spare_fmt, hpr_time_fmt) = zip(*rules)
-
-        log.trace("ZIP:, %s %s %s %s",
-                  hpr_num_name, hpr_num_fmt, beam_angle_name, beam_angle_fmt)
 
         # First unpack the array length and single length value, no need to unpack spare
         (hpr_num_data, beam_angle_data) = struct.unpack_from(
@@ -645,25 +569,20 @@ class AdcptMWVSInstrumentDataParticle(DataParticle):
               DataParticleKey.VALUE: transformed_hpr_time_data[ROLL_TIME_SERIES_IDX]}))
 
     def _parse_values(self, offset, rules):
+        """
+        Convert the binary data into particle data for the given rules
+        """
         position = offset
 
+        # Iterate through the unpacking rules and append the retrieved values with its corresponding
+        # particle name
         for key, formatter in rules:
+            # Skip over spare values
             if 'spare' in key:
                 position += FMT_SIZES[formatter]
-            else:
-                value = list(struct.unpack_from('<%s' % formatter, self.raw_data, position))
-                if len(value) == 1:
-                    value = value[0]
-                log.trace("DATA: %s:%s @ %s", key, value, position)
-                position += FMT_SIZES[formatter]
-                self.final_result.append({DataParticleKey.VALUE_ID: key,
-                                          DataParticleKey.VALUE: value})
-
-    def _parse_variable_leader(self, offset, rules):
-        position = offset
-
-        for key, formatter in rules:
+                continue
             value = list(struct.unpack_from('<%s' % formatter, self.raw_data, position))
+            # Support unpacking single values and lists
             if len(value) == 1:
                 value = value[0]
             if 'start_time' in key:
@@ -679,13 +598,11 @@ class AdcptMWVSInstrumentDataParticle(DataParticle):
 
     def _parse_values_with_array(self, offset, rules):
         """
+        Convert the binary data into particle data for the given rules
         Assumes first value to unpack contains the size of the array for the second value to unpack
         """
         # Unpack the unpacking rules
         (param_size_name, param_list_name), (param_size_fmt, param_list_fmt) = zip(*rules)
-
-        log.trace("ZIP:, %s %s %s %s",
-                  param_size_name, param_size_fmt, param_list_name, param_list_fmt)
 
         # First unpack the array length value
         num_data, = struct.unpack_from('<%s' % param_size_fmt, self.raw_data, offset)
@@ -703,26 +620,13 @@ class AdcptMWVSInstrumentDataParticle(DataParticle):
 class AdcptMWVSParser(BufferLoadingParser):
     """
     Parser for WVS data.
+    Makes use of the buffer loading parser to store the data as it is being read in 1024 bytes
+    at a time and parsed in the sieve below.
     """
-
     def __init__(self, config, stream_handle, *args, **kwargs):
 
-        # self.input_file = stream_handle
-        # Extract the sequence number & file time from the file name
-        self.input_file_name = stream_handle.name
         self.particle_count = 0
-
-        # Extract the sequence number & file time from the file name
-        # match = FILE_NAME_MATCHER.match(stream_handle.name)
-        #
-        # if match:
-        #     # store the sequence number & file time to put into the particle
-        #     self._particle_class._sequence_number = match.group(AdcptMWVSParticleKey.SEQUENCE_NUMBER)
-        #     self._particle_class._file_time = match.group(AdcptMWVSParticleKey.FILE_TIME)
-        # else:
-        #     self.recov_exception_callback(
-        #         'Unable to extract file time or sequence number from WVS input file name: %s '
-        #         % stream_handle.name)
+        self.file_size = os.fstat(stream_handle.fileno()).st_size
 
         super(AdcptMWVSParser, self).__init__(
             config,
@@ -735,7 +639,8 @@ class AdcptMWVSParser(BufferLoadingParser):
         """
         Sort through the input buffer looking for a data record.
         A data record is considered to be properly framed if there is a
-        sync word and the appropriate size.
+        sync word and the appropriate size follwed by the next sync word.
+        Note: this binary data has no checksum to verify against.
         Arguments:
           input_buffer - the contents of the input stream
         Returns:
@@ -744,36 +649,38 @@ class AdcptMWVSParser(BufferLoadingParser):
 
         indices_list = []  # initialize the return list to empty
 
-        # File is initially being read 1024 bytes at a time
+        # File is being read 1024 bytes at a time
         # Match a Header up to the "number of data types" value
-        match = HEADER_MATCHER.search(input_buffer)
-        log.trace("SEARCHING %x", self._stream_handle.tell())
 
-        if match:
+        #find all occurrences of the record header sentinel
+        header_iter = HEADER_MATCHER.finditer(input_buffer)
+        for match in header_iter:
+
             record_start = match.start()
             record_size, = struct.unpack('I', match.group('Record_Size'))
             record_end = record_start + record_size
             num_data, = struct.unpack('B', match.group('NumDataTypes'))
 
-            # if not EOF, check that the next position contains the "starting id" thing
+            # Get a whole record based on meeting the expected size and matching the next sentinel
+            if len(input_buffer) - match.start() >= record_size + ID_TYPE_SIZE:
+                head = struct.unpack_from('<H', input_buffer, record_end)[0]
 
-            # Get a whole record based on meeting the required size
-            if len(input_buffer) >= record_end:
-
-                # check if next byte has the sync word or at end of file
-                if len(input_buffer) == record_size or \
-                   len(input_buffer) == (record_size + 2) and \
-                   Header == struct.unpack_from('<H', input_buffer, record_size)[0]:
-
+                if Header == head or len(input_buffer) == record_size:
                     self.particle_count += 1
                     indices_list.append((record_start, record_end))
-                    log.trace("FOUND RECORD #%s %s:%s ending at %x with %s data types",
-                              self.particle_count,
-                              record_start, record_end,
-                              self._stream_handle.tell(), num_data)
-            else:
-                # go ahead and read in the rest of the record
-                self.get_block(record_size-len(input_buffer)+2)
+                    log.trace("FOUND RECORD #%s %s:%s ending at %x with %s data types, len: %s",
+                              self.particle_count, record_start, record_end,
+                              self._stream_handle.tell(), num_data, len(input_buffer))
+
+            # If at the end of the file and the length of the buffer is of record size, this is the
+            # last record
+            elif self._stream_handle.tell() == self.file_size and len(input_buffer) >= record_size:
+                self.particle_count += 1
+                indices_list.append((record_start, record_end))
+                log.trace("FOUND RECORD #%s %s:%s ending at %x with %s data types. len: %s",
+                          self.particle_count, record_start, record_end,
+                          self._stream_handle.tell(), num_data, len(input_buffer))
+            # else record does not contain enough bytes or is misaligned
 
         return indices_list
 
@@ -785,13 +692,20 @@ class AdcptMWVSParser(BufferLoadingParser):
         # Increment the position within the file.
         # Use the _exception_callback.
         if non_data is not None and non_end <= start:
-            self._exception_callback(UnexpectedDataException(
+            self._exception_callback(RecoverableSampleException(
                 "Found %d bytes of un-expected non-data %s" %
                 (len(non_data), non_data)))
 
-    def recov_exception_callback(self, message):
-        log.warn(message)
-        self._exception_callback(RecoverableSampleException(message))
+    def _process_end_of_file(self):
+        """
+        Override method to use exception call back for corrupt data at the end of a file.
+        Confirm that the chunker does not have any extra bytes left at the end of the file.
+        """
+        (nd_timestamp, non_data) = self._chunker.get_next_non_data()
+        if non_data and len(non_data) > 0:
+            message = "Extra un-expected non-data bytes at the end of the file:%s", non_data
+            log.warn(message)
+            self._exception_callback(RecoverableSampleException(message))
 
     def parse_chunks(self):
         """
@@ -801,17 +715,22 @@ class AdcptMWVSParser(BufferLoadingParser):
         @retval a list of tuples with sample particles encountered in this parsing, plus the state.
         """
 
-        # # Extract the sequence number & file time from the file name
-        match = FILE_NAME_MATCHER.match(self._stream_handle.name)
+        file_name = self._stream_handle.name
+        sequence_number = None
+        file_time = None
+
+        # Extract the sequence number & file time from the file name
+        match = FILE_NAME_MATCHER.match(file_name)
 
         if match:
             # store the sequence number & file time to put into the particle
-            self._particle_class._sequence_number = match.group(AdcptMWVSParticleKey.SEQUENCE_NUMBER)
-            self._particle_class._file_time = match.group(AdcptMWVSParticleKey.FILE_TIME)
+            sequence_number = match.group(AdcptMWVSParticleKey.SEQUENCE_NUMBER)
+            file_time = match.group(AdcptMWVSParticleKey.FILE_TIME)
         else:
-            self.recov_exception_callback(
-                'Unable to extract file time or sequence number from WVS input file name: %s '
-                % self.input_file_name)
+            message = 'Unable to extract file time or sequence number from WVS input file: %s '\
+                      % file_name
+            log.warn(message)
+            self._exception_callback(RecoverableSampleException(message))
 
         result_particles = []
         nd_timestamp, non_data, non_start, non_end = self._chunker.get_next_non_data_with_index(clean=False)
@@ -820,7 +739,7 @@ class AdcptMWVSParser(BufferLoadingParser):
 
         while chunk:
 
-            particle = self._extract_sample(self._particle_class,
+            particle = self._extract_sample(self._particle_class, sequence_number, file_time,
                                             None, chunk, None)
 
             log.trace('Parsed particle: %s\n\n' % particle.generate_dict())
@@ -833,3 +752,41 @@ class AdcptMWVSParser(BufferLoadingParser):
             self.handle_non_data(non_data, non_end, start)
 
         return result_particles
+
+    def _extract_sample(self, particle_class, sequence_number, file_time, regex, raw_data, timestamp):
+        """
+        Override method to pass sequence number and file time to particle
+        Extract sample from a response line if present and publish
+        parsed particle
+
+        @param particle_class The class to instantiate for this specific
+            data particle. Parameterizing this allows for simple, standard
+            behavior from this routine
+        @param regex The regular expression that matches a data sample if regex
+                     is none then process every line
+        @param raw_data data to input into this particle.
+        @retval return a raw particle if a sample was found, else None
+        """
+        particle = None
+
+        try:
+            if regex is None or regex.match(raw_data):
+                particle = particle_class(raw_data, sequence_number, file_time,
+                                          internal_timestamp=timestamp,
+                                          preferred_timestamp=DataParticleKey.INTERNAL_TIMESTAMP)
+
+                # need to actually parse the particle fields to find out of there are errors
+                particle.generate()
+                encoding_errors = particle.get_encoding_errors()
+                if encoding_errors:
+                    log.warn("Failed to encode: %s", encoding_errors)
+                    raise SampleEncodingException("Failed to encode: %s" % encoding_errors)
+
+        except (RecoverableSampleException, SampleEncodingException) as e:
+            log.error("Sample exception detected: %s raw data: %s", e, raw_data)
+            if self._exception_callback:
+                self._exception_callback(e)
+            else:
+                raise e
+
+        return particle
