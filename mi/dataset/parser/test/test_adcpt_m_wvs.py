@@ -30,7 +30,7 @@ class AdcptMWVSParserUnitTestCase(ParserUnitTestCase):
     Adcpt_M_WVS Parser unit test suite
     """
 
-    def create_parser(self, particle_class, file_handle):
+    def create_parser(self, file_handle):
         """
         This function creates a AdcptMWVS parser for recovered data.
         """
@@ -100,7 +100,7 @@ class AdcptMWVSParserUnitTestCase(ParserUnitTestCase):
 
         self.stream_handle = fid
 
-        self.parser = self.create_parser('AdcptMWVSInstrumentDataParticle', fid)
+        self.parser = self.create_parser(fid)
 
         particles = self.parser.get_records(5)
 
@@ -114,22 +114,25 @@ class AdcptMWVSParserUnitTestCase(ParserUnitTestCase):
         tests below. This is mainly for debugging the regexes.
         """
         in_file = self.open_file('CE01ISSM-ADCPT_20140418_000_TS1404180021.WVS')
-        parser = self.create_parser('AdcptMWVSInstrumentDataParticle', in_file)
+        parser = self.create_parser(in_file)
 
         # In a single read, get all particles in this file.
-        result = parser.get_records(516) # 515??
+        result = parser.get_records(515)
         self.assertEqual(len(result), 515)
 
         in_file.close()
         self.assertListEqual(self.exception_callback_value, [])
 
-    def test_recov1(self):
+    def test_recov_excerpt(self):
         """
-        Read a file and pull out a data particle.
+        Read a file and pull out a single data particle.
         Verify that the results are those we expected.
         """
+        # CE01ISSM-ADCPT_20140418_000_TS1404180021 - excerpt.WVS contains only one record
+        # used for a quick sanity test
+
         in_file = self.open_file('CE01ISSM-ADCPT_20140418_000_TS1404180021 - excerpt.WVS')
-        parser = self.create_parser('AdcptMWVSInstrumentDataParticle', in_file)
+        parser = self.create_parser(in_file)
 
         # In a single read, get all particles for this file.
         result = parser.get_records(1)
@@ -140,13 +143,32 @@ class AdcptMWVSParserUnitTestCase(ParserUnitTestCase):
         self.assertListEqual(self.exception_callback_value, [])
         in_file.close()
 
+    def test_recovmod(self):
+        """
+        Test that the data type ID's required to be populated in a particle are filled with NULL
+        when not present in a record.
+        Read a file and pull out a data particle.
+        Verify that the results are those we expected.
+        """
+        in_file = self.open_file('CE01ISSM-ADCPT_20140418_000_TS1404180021 - mod.WVS')
+        parser = self.create_parser(in_file)
+
+        # In a single read, get all particles for this file.
+        result = parser.get_records(1)
+
+        self.assertEqual(len(result), 1)
+        self.assert_particles(result, 'CE01ISSM-ADCPT_20140418_000_TS1404180021 - mod.yml', RESOURCE_PATH)
+
+        self.assertListEqual(self.exception_callback_value, [])
+        in_file.close()
+
     def test_recov(self):
         """
         Read a file and pull out a data particle.
         Verify that the results are those we expected.
         """
         in_file = self.open_file('CE01ISSM-ADCPT_20140418_000_TS1404180021.WVS')
-        parser = self.create_parser('AdcptMWVSInstrumentDataParticle', in_file)
+        parser = self.create_parser(in_file)
 
         # In a single read, get all particles for this file.
         result = parser.get_records(5)
@@ -155,94 +177,44 @@ class AdcptMWVSParserUnitTestCase(ParserUnitTestCase):
         self.assert_particles(result, 'CE01ISSM-ADCPT_20140418_000_TS1404180021.yml', RESOURCE_PATH)
 
         self.assertListEqual(self.exception_callback_value, [])
+
         in_file.close()
 
     def test_bad_data(self):
         """
-        Ensure that bad data is skipped when it exists.
+        Ensure that the sieve is robust enough to skip records that are incomplete/missing bytes.
         """
-        # Line 4: Fields missing
-        # Line 5: Frequencies missing
-        # Line 6: Fields is a float
-        # Line 7: Frequencies is a float
-        # Line 8: Fields has a non digit
-        # Line 9: Frequencies has a non digit
+        # CE01ISSM-ADCPT_20140418_000_TS1404180021 - corrupt.WVS is a copy of
+        # CE01ISSM-ADCPT_20140418_000_TS1404180021.WVS with bytes arbitrarily removed in 10 records
+        # including the last record in the binary file
 
-        # Line 12: Frequency Bands width missing
-        # Line 13: Frequencies band centered missing
-        # Line 14: Frequency Bands width is a float
-        # Line 15: Frequencies band centered is a float
-        # Line 16: Frequency Bands width has a non digit
-        # Line 17: Frequencies band centered has a non digit
+        fid = open(os.path.join(RESOURCE_PATH, 'CE01ISSM-ADCPT_20140418_000_TS1404180021 - corrupt.WVS'), 'rb')
 
-        # Line 18: Frequency(Hz) missing
-        # Line 19: Frequency(Hz) is an int
-        # Line 20: Frequency(Hz) has a non digit
+        parser = self.create_parser(fid)
 
-        # Line 21: Band width(Hz) missing
-        # Line 22: Band width(Hz) is an int
-        # Line 23: Band width(Hz) has a non digit
-
-        # Line 24: Energy density(m^2/Hz) missing
-        # Line 25: Energy density(m^2/Hz) is an int
-        # Line 26: Energy density(m^2/Hz) has a non digit
-
-        # Line 27: Direction (deg) missing
-        # Line 28: Direction (deg) is an int
-        # Line 29: Direction (deg) has a non digit
-
-        # Line 30: A1 missing
-        # Line 31: A1 is an int
-        # Line 32: A1 has a non digit
-
-        # Line 33: B1 missing
-        # Line 34: B1 is an int
-        # Line 35: B1 has a non digit
-
-        # Line 36: A2 missing
-        # Line 37: A2 is an int
-        # Line 38: A2 has a non digit
-
-        # Line 39: B2 missing
-        # Line 40: B2 is an int
-        # Line 41: B2 has a non digit
-
-        # Line 42: Check Factor missing
-        # Line 43: Check Factor is an int
-        # Line 44: Check Factor has a non digit
-
-        # Line 45: Space delimiter missing
-
-        fid = open(os.path.join(RESOURCE_PATH, 'Corrupt_CE01ISSM-ADCPT_20140418_000_TS1404180021.WVS'), 'rb')
-
-        parser = self.create_parser('AdcptMWVSInstrumentDataParticle', fid)
-
-        result = parser.get_records(1)
-        self.assertEqual(len(result), 0)
+        result = parser.get_records(515)
+        self.assertEqual(len(result), 505)
 
         for i in range(len(self.exception_callback_value)):
             self.assert_(isinstance(self.exception_callback_value[i], RecoverableSampleException))
             log.debug('Exception: %s', self.exception_callback_value[i])
-
-        self.assert_(isinstance(self.exception_callback_value[0], RecoverableSampleException))
 
         fid.close()
 
     def test_missing_file_time(self):
         """
-        Ensure that bad data is skipped when it exists.
+        Ensure a particle is created with missing file time and sequence filled with Null and
+        the recoverable sample exception is recorded.
         """
-        fid = open(os.path.join(RESOURCE_PATH, 'CE01ISSM-ADCPT_20140418_NoTime - excerpt.WVS.txt'), 'rb')
+        fid = open(os.path.join(RESOURCE_PATH, 'CE01ISSM-ADCPT_20140418_NoTime - excerpt.WVS'), 'rb')
 
-        parser = self.create_parser('AdcptMWVSInstrumentDataParticle', fid)
+        parser = self.create_parser(fid)
 
         result = parser.get_records(1)
-        self.assertEqual(len(result), 0)
+        self.assertEqual(len(result), 1)
 
         for i in range(len(self.exception_callback_value)):
             self.assert_(isinstance(self.exception_callback_value[i], RecoverableSampleException))
             log.debug('Exception: %s', self.exception_callback_value[i])
-
-        self.assert_(isinstance(self.exception_callback_value[0], RecoverableSampleException))
 
         fid.close()
